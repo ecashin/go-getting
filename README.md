@@ -4,7 +4,7 @@ go-getting
 Exercises in learning the Go programming language
 
 
-bakery.go - Go implementation of 1975 Lamport bakery algorithm
+bakery.go - Go implementation of 1974 Lamport bakery algorithm
 
   Leslie Lamport, author of the LaTeX macropackage for Don Knuth's TeX
   typesetting engine, is also famous for his often-cited papers on
