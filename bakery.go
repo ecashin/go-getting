@@ -15,20 +15,14 @@ var nIters = 5
  * algorithm.
  */
 func critical_section(id int, cs *int) {
-	*cs++	// this proc is in the critical section now
+	fmt.Printf("%d in critical section\n", id)
 	if *cs > 1 {
 		panic("mutual exclusion violated (1)")
 	}
-	fmt.Printf("%d in critical section\n", id)
-	if *cs > 1 {
-		panic("mutual exclusion violated (2)")
-	}
+	*cs = 1
 	// hog the resource for a while
 	time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
-	if *cs > 1 {
-		panic("mutual exclusion violated (3)")
-	}
-	*cs--	// done with critical section
+	*cs = 0
 }
 
 func max(a[] int) int {
