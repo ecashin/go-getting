@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"runtime"
 	"fmt"
 	"time"
@@ -16,7 +17,7 @@ var nIters = 5
  */
 func critical_section(id int, cs *int) {
 	fmt.Printf("%d in critical section\n", id)
-	if *cs > 1 {
+	if *cs != 0 {
 		panic("mutual exclusion violated (1)")
 	}
 	*cs = 1
@@ -35,6 +36,16 @@ func max(a[] int) int {
 	return m
 }
 
+// sort based on number order first, then participant order
+func lt(na, ia, nb, ib int) bool {
+	if na < nb {
+		return true
+	} else if na > nb {
+		return false
+	}
+	return ia < ib
+}
+
 func proc(cs *int, id int, choosing, number[] int, done chan int) {
 	y := func() { /* runtime.Gosched() */ }
 	for i := 0; i < nIters; i++ {
@@ -44,7 +55,9 @@ func proc(cs *int, id int, choosing, number[] int, done chan int) {
 		choosing[id] = 0
 		for j := 0; j < len(choosing); j++ {
 			for choosing[j] != 0 { y() }
-			for number[j] != 0 && number[j] < number[id] { y() }
+			for number[j] != 0 && lt(number[j], j, number[id], id) {
+				y()
+			}
 		}
 		critical_section(id, cs)
 		number[id] = 0
@@ -53,6 +66,12 @@ func proc(cs *int, id int, choosing, number[] int, done chan int) {
 }
 
 func main() {
+	if len(os.Args) > 1 {
+		_, err := fmt.Sscanf(os.Args[1], "%d", &nIters)
+		if err != nil {
+			panic(err);
+		}
+	}		
 	nCPUs = runtime.NumCPU()
 	var cs int = 0	// number procs in the critical section
 	rand.Seed(time.Now().UnixNano())
