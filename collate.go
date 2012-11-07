@@ -12,9 +12,10 @@
  * each tag, printing a command that will export the collated
  * commits from a git repo.
  *
- * Here's an example invocation:
+ * Here's an example test-and-run invocation pair:
  *
- *   go run collate.go < commits.txt
+ *   go run collate.go < commits.txt | less
+ *   go run collate.go < commits.txt | sh
  *
  * The example output is too ugly as is, so here's a cleaned-up
  * version, with abbreviated sha1 sums.
