@@ -33,3 +33,7 @@ bakery.go - Go implementation of 1974 Lamport bakery algorithm
   to multiplex the goroutines onto shared O.S. threads, then they're
   acting as coroutines, so the runtime.Gosched() call is needed in the
   busy wait for the coroutines to yield the CPU.
+
+bakery-v.go - Verbose Go implementation of 1974 Lamport bakery algorithm
+
+selfwrite.go - Go program that writes its own source to stdout
