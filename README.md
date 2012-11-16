@@ -36,4 +36,10 @@ bakery.go - Go implementation of 1974 Lamport bakery algorithm
 
 bakery-v.go - Verbose Go implementation of 1974 Lamport bakery algorithm
 
+bakery-dist.go - Distributed Go implementation of Lamport's bakery
+
+  This distributed implementation shows how to use Go's HTTP
+  RPC features.  In a production app where more performance was
+  desired, connections could be reused.
+
 selfwrite.go - Go program that writes its own source to stdout
