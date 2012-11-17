@@ -47,3 +47,5 @@ selfwrite.go - Go program that writes its own source to stdout
 linesrv.go - Simple web server demo
 
 closure.go - Linked list iterator callback illustrates closure
+
+observer.go - judge for correctness of bakery implementation

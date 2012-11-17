@@ -1,3 +1,10 @@
+/* observer.go - HTTP RPC server watches critical section owner
+ *
+ * This program is for checking whether critical section
+ * entrances and exits are interleaved for different owners,
+ * signalling an error if there's a problem.
+ */
+
 package main
 
 import (
