@@ -43,3 +43,7 @@ bakery-dist.go - Distributed Go implementation of Lamport's bakery
   desired, connections could be reused.
 
 selfwrite.go - Go program that writes its own source to stdout
+
+linesrv.go - Simple web server demo
+
+closure.go - Linked list iterator callback illustrates closure

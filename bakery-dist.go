@@ -22,10 +22,6 @@
  * hosts.  Their servers come up first, and then they wait for
  * all the hosts to check in before starting the bakery algorithm.
  *
- * I wonder whether it's a bug to loop in the undefined key order
- * of the hosts map instead of in their static order, which is
- * lexically by host name in this program.
- *
  * usage example:
  *
  *   for i in a b c; do echo "$i"; done > hosts.txt
@@ -50,6 +46,8 @@ import (
 	"net/rpc"
 	"log"
 	"net/http"
+	"container/list"
+	"sort"
 )
 
 var nNodes int
@@ -63,6 +61,7 @@ var nIters = 500
 var port = 8766
 
 var liveHosts map[string]bool
+var hostList *list.List
 
 func (t *Customer) BakeryNumber(requestor *string, reply *int) error {
 	log.Printf("sending my number %d to %s\n", me.number, *requestor)
@@ -112,14 +111,23 @@ func isChoosing(host string) bool {
 	return n != 0
 }
 
+func eachHost(func action(h string) bool) {
+	for e := hostList.Front(); e != nil; e = e.Next() {
+		h := e.Value.(string)
+		if ! action(h) {
+			break
+		}
+	}
+}
+
 func maxNumber() int {
 	m := 0
-	for host, _ := range liveHosts {
+	eachHost(func(host string) {
 		hnum := numOfHost(host)
 		if hnum > m {
 			m = hnum
 		}
-	}
+	})
 	return m
 }
 
@@ -161,7 +169,7 @@ func bakeryFun() {
 		me.choosing = false
 		status(me.name, "!choosing")
 		j := 0
-		for host, _ := range liveHosts {
+		eachHost(func(host string) {
 			choosing := true
 			for choosing {
 				choosing = isChoosing(host)
@@ -176,7 +184,7 @@ func bakeryFun() {
 				status(waiter, ">", winner)
 				n = numOfHost(host)
 			}
-		}
+		})
 		critical_section()
 		status(me.name, "number", 0)
 		me.number = 0
@@ -248,6 +256,21 @@ func mpInit() {
 	runtime.GOMAXPROCS(n)
 }
 
+func sortedHosts() *list.List {
+	hl := list.New()
+	a := make([]string, len(liveHosts))
+	i := 0
+	for h, _ := range liveHosts {
+		a[i] = h
+		i++
+	}
+	sort.Strings(a)
+	for _, h := range a {
+		hl.PushBack(h)
+	}
+	return hl
+}
+
 func main() {
 	if len(os.Args) > 1 {
 		_, err := fmt.Sscanf(os.Args[1], "%d", &nIters)
@@ -281,6 +304,7 @@ func main() {
 		}
 		line, err = in.ReadSlice('\n')
 	}
+	hostList = sortedHosts()
 	me = new(Customer)
 	me.name = myName
 	go srv()
