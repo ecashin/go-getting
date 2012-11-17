@@ -50,6 +50,8 @@ import (
 	"sort"
 )
 
+var observer *string
+
 var nNodes int
 type Customer struct {
 	choosing bool
@@ -90,8 +92,16 @@ func (t *Customer) HostDown(requestor *string, _ *int) error {
 
 func critical_section() {
 	status(me.name, "critical")
+	if observer != nil {
+		doRPC(*observer, "Observer.EnterCS",
+			me.name + " enters critical section")
+	}
 	// hog the resource for a while
 	time.Sleep(time.Duration(rand.Intn(20)) * time.Millisecond)
+	if observer != nil {
+		doRPC(*observer, "Observer.ExitCS",
+			me.name + " exits critical section")
+	}
 	status(me.name, "!critical")
 }
 
@@ -111,23 +121,15 @@ func isChoosing(host string) bool {
 	return n != 0
 }
 
-func eachHost(func action(h string) bool) {
-	for e := hostList.Front(); e != nil; e = e.Next() {
-		h := e.Value.(string)
-		if ! action(h) {
-			break
-		}
-	}
-}
-
 func maxNumber() int {
 	m := 0
-	eachHost(func(host string) {
+	for e := hostList.Front(); e != nil; e = e.Next() {
+		host := e.Value.(string)
 		hnum := numOfHost(host)
 		if hnum > m {
 			m = hnum
 		}
-	})
+	}
 	return m
 }
 
@@ -169,7 +171,8 @@ func bakeryFun() {
 		me.choosing = false
 		status(me.name, "!choosing")
 		j := 0
-		eachHost(func(host string) {
+		for e := hostList.Front(); e != nil; e = e.Next() {
+			host := e.Value.(string)
 			choosing := true
 			for choosing {
 				choosing = isChoosing(host)
@@ -184,7 +187,7 @@ func bakeryFun() {
 				status(waiter, ">", winner)
 				n = numOfHost(host)
 			}
-		})
+		}
 		critical_section()
 		status(me.name, "number", 0)
 		me.number = 0
@@ -210,7 +213,8 @@ func waitHosts(which bool) {
 	fmt.Printf("waiting for hosts to be %s\n", s)
 	for true {
 		done := true
-		for _, v := range liveHosts {
+		for e := hostList.Front(); e != nil; e = e.Next() {
+			v := liveHosts[e.Value.(string)]
 			if v != which {
 				done = false
 			}
@@ -230,21 +234,23 @@ func doRPC(host, method, description string) int {
 	var result int
 	err = client.Call(method, &me.name, &result)
 	if err != nil {
-		log.Fatal(description, " ", host, ": ", err)
+		log.Fatal("fatal: ", description, " ", host, ": ", err)
 	}
 	client.Close()
 	return result
 }
 func waitLive() {
-	for k, _ := range liveHosts {
-		doRPC(k, "Customer.HostUp", "announcing I'm up")
+	for e := hostList.Front(); e != nil; e = e.Next() {
+		h := e.Value.(string)
+		doRPC(h, "Customer.HostUp", "announcing I'm up to " + h)
 	}
 	waitHosts(true)
 	log.Println("all hosts are up")
 }
 func waitDead() {
-	for k, _ := range liveHosts {
-		doRPC(k, "Customer.HostDown", "announcing I'm down")
+	for e := hostList.Front(); e != nil; e = e.Next() {
+		h := e.Value.(string)
+		doRPC(h, "Customer.HostDown", "announcing I'm down to " + h)
 	}
 	waitHosts(false)
 	log.Println("all hosts are down")
@@ -278,13 +284,17 @@ func main() {
 			panic(err);
 		}
 	}
-	// any second command line argument disables debug output
+	// any second command-line argument disables debug output
 	if len(os.Args) > 2 {
 		null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 		if err != nil {
 			panic(err)
 		}
 		log.SetOutput(null)
+	}
+	// third command-line argument is observer host
+	if len(os.Args) > 3 {
+		observer = &os.Args[3]
 	}
 	rand.Seed(time.Now().UnixNano())
 	mpInit()
