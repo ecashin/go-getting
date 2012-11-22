@@ -10,6 +10,7 @@ import (
 	"log"
 	"os/exec"
 	"bufio"
+	"runtime"
 )
 
 // First some static HTML
@@ -47,6 +48,17 @@ var foot = `
 `
 
 func handler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprint(w, head)
+	c := make(chan string)
+	go shellcmd(c)
+	for s := range c {
+		fmt.Fprintln(w, s)
+		w.(http.Flusher).Flush()
+	}
+	fmt.Fprint(w, foot)
+}
+
+func shellcmd(sink chan string) {
 	c := exec.Command("sh", "-c", "i=1; while test $i -lt 15; do echo $i; sleep 1; i=`expr $i + 1`; done")
 	fromcmd, err := c.StdoutPipe()
 	if err != nil {
@@ -59,13 +71,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 
-	fmt.Fprint(w, head)
 	var line []byte
 	for err == nil {
 		line, _, err = fromcmdb.ReadLine()
 		if err == nil || err == io.EOF {
-			fmt.Fprintln(w, string(line))
-			w.(http.Flusher).Flush()
+			sink <- string(line)
 		}
 	}
 	if err != io.EOF {
@@ -74,10 +84,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if err := c.Wait(); err != nil {
 		log.Print(err)
 	}
-	fmt.Fprint(w, foot)
+	close(sink)
 }
 
 func main() {
+	n := runtime.NumCPU()
+	runtime.GOMAXPROCS(n)
+	log.Printf("set GOMAXPROCS to %d\n", n)
 	http.HandleFunc("/", handler)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
