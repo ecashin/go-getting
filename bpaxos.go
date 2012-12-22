@@ -27,16 +27,16 @@ type proposal struct {
 	val value
 }
 
-type sendProposal struct {
+type proposalMsg struct {
 	proposal
 	c chan proposal
 }
 
-func (p *proposer) propose(n int, acceptors chan sendProposal) bool {
+func (p *proposer) propose(n int, acceptors chan proposalMsg) bool {
 	p.num++
 	c := make(chan proposal)
 	for i := 0; i < n; i++ {
-		acceptors <- sendProposal{proposal{p.num, nil}, c}
+		acceptors <- proposalMsg{proposal{p.num, nil}, c}
 	}
 	var v value
 
@@ -57,7 +57,7 @@ func (p *proposer) propose(n int, acceptors chan sendProposal) bool {
 	}
 	for i := 0; i < n; i++ {
 		// attempt to set value
-		acceptors <- sendProposal{proposal{p.num, v}, c}
+		acceptors <- proposalMsg{proposal{p.num, v}, c}
 	}
 	// XXX needs timeout for acceptor failures
 	for i := 0; i < n; i++ {
@@ -75,7 +75,7 @@ func (p *proposer) propose(n int, acceptors chan sendProposal) bool {
 	return true
 }
 
-func (a *acceptor) show(cmd sendProposal) {
+func (a *acceptor) show(cmd proposalMsg) {
 	t := "proposed"
 	if cmd.val != nil {
 		t = "set"
@@ -83,7 +83,7 @@ func (a *acceptor) show(cmd sendProposal) {
 	fmt.Println(t, a.biggest, a.val)
 }
 
-func (a *acceptor) accept(proposers chan sendProposal) {
+func (a *acceptor) accept(proposers chan proposalMsg) {
 	for cmd := range proposers {
 		if cmd.val == nil {
 			if cmd.num > a.biggest {
@@ -103,7 +103,7 @@ func main() {
 	pa := &proposer{"alice", 0}
 	// pb := &proposer{"bob", 0}
 	a := &acceptor{-1, nil}
-	cmdc := make(chan sendProposal)
+	cmdc := make(chan proposalMsg)
 	go a.accept(cmdc)
 	fmt.Println("did it work? ", pa.propose(1, cmdc))
 }
