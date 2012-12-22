@@ -11,67 +11,99 @@ import (
 )
 
 type proposer struct {
+	name string
 	num int64
 }
 
 type acceptor struct {
 	biggest int64
+	val value
 }
 
-type val struct {
-	v string
+type value *string
+
+type proposal struct {
 	num int64
-	rsp chan bool
+	val value
 }
 
-func (p *proposer) propose(n int, propose, promise chan int64, value chan val) {
+type sendProposal struct {
+	proposal
+	c chan proposal
+}
+
+func (p *proposer) propose(n int, acceptors chan sendProposal) bool {
 	p.num++
+	c := make(chan proposal)
 	for i := 0; i < n; i++ {
-		propose <- p.num
+		acceptors <- sendProposal{proposal{p.num, nil}, c}
 	}
+	var v value
+
+	// XXX needs timeout for acceptor failures
 	for i := 0; i < n; i++ {
-		if <-promise != p.num {
-			panic("nack")
+		rsp := <-c
+		if rsp.num != p.num {
+			p.num = rsp.num
+			return false
+		}
+		if rsp.val != nil {
+			v = rsp.val
 		}
 	}
-	ok := make(chan bool)
-	v := val{"the word of the day is shiny", p.num, ok}
+	if v == nil {
+		s := "my name is " + p.name
+		v = &s
+	}
 	for i := 0; i < n; i++ {
-		value <- v
-		if ! <- ok {
-			panic("not accepted")
+		// attempt to set value
+		acceptors <- sendProposal{proposal{p.num, v}, c}
+	}
+	// XXX needs timeout for acceptor failures
+	for i := 0; i < n; i++ {
+		rsp := <-c
+		if rsp.num != p.num {
+			p.num = rsp.num
+			return false
+		}
+		if rsp.val != v {
+			return false
 		}
 	}
-	fmt.Println("consensus:", v.v)
+	close(acceptors)
+	fmt.Println("consensus:", *v)
+	return true
 }
 
-func (a *acceptor) accept(propose, promise chan int64, value chan val) {
-	for {
-		select {
-		case n := <- propose:
-			if n > a.biggest {
-				a.biggest = n
-				promise <- n
-			} else {
-				promise <- -1
+func (a *acceptor) show(cmd sendProposal) {
+	t := "proposed"
+	if cmd.val != nil {
+		t = "set"
+	}
+	fmt.Println(t, a.biggest, a.val)
+}
+
+func (a *acceptor) accept(proposers chan sendProposal) {
+	for cmd := range proposers {
+		if cmd.val == nil {
+			if cmd.num > a.biggest {
+				a.biggest = cmd.num
 			}
-		case v := <- value:
-			if a.biggest <= v.num {
-				fmt.Println("accepting ", v.num)
-				v.rsp <- true
-			} else {
-				v.rsp <- false
+		} else {
+			if cmd.num >= a.biggest && a.val == nil {
+				a.val = cmd.val
 			}
 		}
+		a.show(cmd)
+		cmd.c <- proposal{a.biggest, a.val}
 	}	
 }
 
 func main() {
-	p := &proposer{0}
-	a := &acceptor{-1}
-	propose := make(chan int64)
-	promise := make(chan int64)
-	value := make(chan val)
-	go a.accept(propose, promise, value)
-	p.propose(1, propose, promise, value)
+	pa := &proposer{"alice", 0}
+	// pb := &proposer{"bob", 0}
+	a := &acceptor{-1, nil}
+	cmdc := make(chan sendProposal)
+	go a.accept(cmdc)
+	fmt.Println("did it work? ", pa.propose(1, cmdc))
 }
