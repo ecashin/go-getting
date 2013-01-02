@@ -8,11 +8,14 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"flag"
 )
 
 type proposer struct {
 	name string
 	num int64
+	success bool
 }
 
 type acceptor struct {
@@ -29,58 +32,86 @@ type proposal struct {
 
 type proposalMsg struct {
 	proposal
+	sender string
 	c chan proposal
 }
 
-func (p *proposer) propose(n int, acceptors chan proposalMsg) bool {
+func (p *proposer) propose(n int, acceptors chan proposalMsg, exit chan bool) {
+	defer func() {
+		exit <- p.success
+	}()
 	p.num++
 	c := make(chan proposal)
 	for i := 0; i < n; i++ {
-		acceptors <- proposalMsg{proposal{p.num, nil}, c}
+		// try out this proposal number
+		log.Printf("%s sending proposed number %d iter %d\n",
+			p.name, p.num, i)
+		acceptors <- proposalMsg{proposal{p.num, nil}, p.name, c}
 	}
 	var v value
 
+	abort := false
 	// XXX needs timeout for acceptor failures
+tmp := p.num
 	for i := 0; i < n; i++ {
+		log.Printf("%s reading rsp to proposed number %d iter %d\n",
+			p.name, tmp, i)
 		rsp := <-c
 		if rsp.num != p.num {
 			p.num = rsp.num
-			return false
+			p.success = false
+			abort = true
 		}
 		if rsp.val != nil {
 			v = rsp.val
 		}
 	}
+	if abort {
+		log.Printf("%s aborting after proposed number\n", p.name)
+		p.success = false
+		return		
+	}
 	if v == nil {
-		s := "my name is " + p.name
+		s := fmt.Sprintf("v%d my name is %s", p.num, p.name)
 		v = &s
 	}
 	for i := 0; i < n; i++ {
 		// attempt to set value
-		acceptors <- proposalMsg{proposal{p.num, v}, c}
+		log.Printf("%s setting val for proposed number %d iter %d\n",
+			p.name, p.num, i)
+		acceptors <- proposalMsg{proposal{p.num, v}, p.name, c}
 	}
+
 	// XXX needs timeout for acceptor failures
 	for i := 0; i < n; i++ {
+		log.Printf("%s reading rsp after setting val for proposed number %d iter %d\n",
+			p.name, p.num, i)
 		rsp := <-c
 		if rsp.num != p.num {
 			p.num = rsp.num
-			return false
+			p.success = false
+			abort = true
 		}
 		if rsp.val != v {
-			return false
+			p.success = false
+			abort = true
 		}
 	}
-	close(acceptors)
-	fmt.Println("consensus:", *v)
-	return true
+	p.success = !abort
+	log.Printf("%s exiting with success(%v)\n",
+		p.name, p.success)
 }
 
 func (a *acceptor) show(cmd proposalMsg) {
-	t := "proposed"
+	t := ""
 	if cmd.val != nil {
-		t = "set"
+		t += "set value \"" + *cmd.val + "\""
+	} else {
+		t += "propose " + string(cmd.num)
 	}
-	fmt.Println(t, a.biggest, a.val)
+	// XXX changing the line below to "log.Printf" reveals deadlock
+	fmt.Printf("acceptor saw %s %s responding with biggest:%d val:%v\n",
+		 cmd.sender, t, a.biggest, a.val)
 }
 
 func (a *acceptor) accept(proposers chan proposalMsg) {
@@ -99,11 +130,33 @@ func (a *acceptor) accept(proposers chan proposalMsg) {
 	}	
 }
 
+var nProds int
+var nAccs int
+func init() {
+	flag.IntVar(&nProds, "p", 1, "specify number of proposers")
+	flag.IntVar(&nAccs, "a", 3, "specify number of acceptors")
+}
 func main() {
-	pa := &proposer{"alice", 0}
-	// pb := &proposer{"bob", 0}
-	a := &acceptor{-1, nil}
+	flag.Parse()
+	fmt.Println(nProds, nAccs)
+	pexitc := make(chan bool)	// for the proposers to signal exit
+	p := make([]*proposer, nProds)
+	for i := 0; i < nProds; i++ {
+		p[i] = &proposer{fmt.Sprintf("proposer%d", i), 0, false}
+	}
 	cmdc := make(chan proposalMsg)
-	go a.accept(cmdc)
-	fmt.Println("did it work? ", pa.propose(1, cmdc))
+	for i := 0; i < nAccs; i++ {
+		a := &acceptor{-1, nil}
+		go a.accept(cmdc)
+	}
+	for i := 0; i < nProds; i++ {
+		go p[i].propose(nAccs, cmdc, pexitc)
+	}
+	for i := 0; i < nProds; i++ {
+		<-pexitc
+	}
+	for i := 0; i < nProds; i++ {
+		fmt.Printf("%s got consensus? %v\n", p[i].name, p[i].success)
+	}
+	close(cmdc)
 }
