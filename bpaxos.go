@@ -117,11 +117,15 @@ func (a *acceptor) show(cmd proposalMsg) {
 func (a *acceptor) accept(proposers chan proposalMsg) {
 	for cmd := range proposers {
 		if cmd.val == nil {
+			// it's a Prepare message
 			if cmd.num > a.biggest {
 				a.biggest = cmd.num
+				a.val = nil
 			}
 		} else {
+			// Accept! message
 			if cmd.num >= a.biggest && a.val == nil {
+				// XXX unreliable delivery needs consideration for cmd.num > a.biggest
 				a.val = cmd.val
 			}
 		}
