@@ -51,18 +51,22 @@ func (p *proposer) propose(n int, acceptors chan proposalMsg, exit chan bool) {
 	var v value
 
 	abort := false
+	orig_pnum := p.num
+	// "Paxos Made Simple", Phase 2. (a), says
+	// that proposer uses value with highest number.
+	maxRspNum := int64(-1)
 	// XXX needs timeout for acceptor failures
-tmp := p.num
 	for i := 0; i < n; i++ {
 		log.Printf("%s reading rsp to proposed number %d iter %d\n",
-			p.name, tmp, i)
+			p.name, orig_pnum, i)
 		rsp := <-c
 		if rsp.num != p.num {
 			p.num = rsp.num
 			p.success = false
 			abort = true
 		}
-		if rsp.val != nil {
+		if rsp.val != nil && rsp.num > maxRspNum {
+			maxRspNum = rsp.num
 			v = rsp.val
 		}
 	}
