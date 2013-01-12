@@ -2,7 +2,16 @@
 // see:
 //   http://en.wikipedia.org/wiki/Paxos_%28computer_science%29
 //   http://research.microsoft.com/en-us/um/people/lamport/pubs/pubs.html#lamport-paxos
+// I started this based on wikipedia but needed Lamport's
+// "Paxos Made Simple" to really nail down the details, like
+// the fact that propoers use numbers from disjoint sets.
 //
+//   http://research.microsoft.com/en-us/um/people/lamport/pubs/pubs.html#paxos-simple
+//
+// TODO:
+// * make all nodes peers, able to assume any role
+// * timeouts for unresponsive participants
+// * switch to UDP-based networking and distributed implementation
 
 package main
 
@@ -11,6 +20,8 @@ import (
 	"log"
 	"flag"
 )
+
+const NMaxProposers = 10
 
 type proposer struct {
 	name string
@@ -36,11 +47,20 @@ type proposalMsg struct {
 	c chan proposal
 }
 
+func (p *proposer) exceed(n int64) {
+	// different producer should not use my numbers
+	if p.num == n {
+		panic("derp")
+	}
+	for p.num < n {
+		p.num += NMaxProposers
+	}
+}
+
 func (p *proposer) propose(n int, acceptors chan proposalMsg, exit chan bool) {
 	defer func() {
 		exit <- p.success
 	}()
-	p.num++
 	c := make(chan proposal)
 	for i := 0; i < n; i++ {
 		// try out this proposal number
@@ -53,15 +73,15 @@ func (p *proposer) propose(n int, acceptors chan proposalMsg, exit chan bool) {
 	abort := false
 	orig_pnum := p.num
 	// "Paxos Made Simple", Phase 2. (a), says
-	// that proposer uses value with highest number.
+	// that proposer uses value with highest number
+	// from responses to "prepare" messages.
 	maxRspNum := int64(-1)
-	// XXX needs timeout for acceptor failures
 	for i := 0; i < n; i++ {
 		log.Printf("%s reading rsp to proposed number %d iter %d\n",
 			p.name, orig_pnum, i)
 		rsp := <-c
 		if rsp.num != p.num {
-			p.num = rsp.num
+			p.exceed(rsp.num)
 			p.success = false
 			abort = true
 		}
@@ -86,13 +106,12 @@ func (p *proposer) propose(n int, acceptors chan proposalMsg, exit chan bool) {
 		acceptors <- proposalMsg{proposal{p.num, v}, p.name, c}
 	}
 
-	// XXX needs timeout for acceptor failures
 	for i := 0; i < n; i++ {
 		log.Printf("%s reading rsp after setting val for proposed number %d iter %d\n",
 			p.name, p.num, i)
 		rsp := <-c
 		if rsp.num != p.num {
-			p.num = rsp.num
+			p.exceed(rsp.num)
 			p.success = false
 			abort = true
 		}
@@ -111,10 +130,10 @@ func (a *acceptor) show(cmd proposalMsg) {
 	if cmd.val != nil {
 		t += "set value \"" + *cmd.val + "\""
 	} else {
-		t += "propose " + string(cmd.num)
+		t += fmt.Sprintf("propose %d", cmd.num)
 	}
 	// XXX changing the line below to "log.Printf" reveals deadlock
-	fmt.Printf("acceptor saw %s %s responding with biggest:%d val:%v\n",
+	fmt.Printf("acceptor saw %s %s; responding with biggest:%d val:%v\n",
 		 cmd.sender, t, a.biggest, a.val)
 }
 
@@ -124,12 +143,24 @@ func (a *acceptor) accept(proposers chan proposalMsg) {
 			// it's a Prepare message
 			if cmd.num > a.biggest {
 				a.biggest = cmd.num
-				a.val = nil
+
+				// When acceptor gets higher num
+				// prepare, it responds with its current
+				// value. The proposer sees all the
+				// values in the prepare responses and
+				// picks the highest numbered one. The
+				// same acceptor will then accept
+				// whatever the proposer says is the
+				// value.  That implies the acceptor must
+				// retain the previously accepted value
+				// at this step.
 			}
 		} else {
 			// Accept! message
-			if cmd.num >= a.biggest && a.val == nil {
-				// XXX unreliable delivery needs consideration for cmd.num > a.biggest
+			if cmd.num >= a.biggest {
+				// for unreliable delivery of Accept!
+				// messages with cmd.num > a.biggest,
+				// proposer can keep trying for a quorum
 				a.val = cmd.val
 			}
 		}
@@ -150,7 +181,7 @@ func main() {
 	pexitc := make(chan bool)	// for the proposers to signal exit
 	p := make([]*proposer, nProds)
 	for i := 0; i < nProds; i++ {
-		p[i] = &proposer{fmt.Sprintf("proposer%d", i), 0, false}
+		p[i] = &proposer{fmt.Sprintf("proposer%d", i), int64(i), false}
 	}
 	cmdc := make(chan proposalMsg)
 	for i := 0; i < nAccs; i++ {
