@@ -91,7 +91,8 @@ func (p *proposer) propose(n int, acceptors chan proposalMsg, exit chan bool) {
 		}
 	}
 	if abort {
-		log.Printf("%s aborting after proposed number\n", p.name)
+		log.Printf("%s aborting after proposing number %d\n",
+			p.name, orig_pnum)
 		p.success = false
 		return		
 	}
@@ -137,35 +138,39 @@ func (a *acceptor) show(cmd proposalMsg) {
 		 cmd.sender, t, a.biggest, a.val)
 }
 
+func (a *acceptor) handleCmd(cmd proposalMsg) {
+	if cmd.val == nil {
+		// it's a Prepare message
+		if cmd.num > a.biggest {
+			a.biggest = cmd.num
+
+			// When acceptor gets higher num
+			// prepare, it responds with its current
+			// value. The proposer sees all the
+			// values in the prepare responses and
+			// picks the highest numbered one. The
+			// same acceptor will then accept
+			// whatever the proposer says is the
+			// value.  That implies the acceptor must
+			// retain the previously accepted value
+			// at this step.
+		}
+	} else {
+		// Accept! message
+		if cmd.num >= a.biggest {
+			// for unreliable delivery of Accept!
+			// messages with cmd.num > a.biggest,
+			// proposer can keep trying for a quorum
+			a.val = cmd.val
+		}
+	}
+	a.show(cmd)
+	cmd.c <- proposal{a.biggest, a.val}
+}
+
 func (a *acceptor) accept(proposers chan proposalMsg) {
 	for cmd := range proposers {
-		if cmd.val == nil {
-			// it's a Prepare message
-			if cmd.num > a.biggest {
-				a.biggest = cmd.num
-
-				// When acceptor gets higher num
-				// prepare, it responds with its current
-				// value. The proposer sees all the
-				// values in the prepare responses and
-				// picks the highest numbered one. The
-				// same acceptor will then accept
-				// whatever the proposer says is the
-				// value.  That implies the acceptor must
-				// retain the previously accepted value
-				// at this step.
-			}
-		} else {
-			// Accept! message
-			if cmd.num >= a.biggest {
-				// for unreliable delivery of Accept!
-				// messages with cmd.num > a.biggest,
-				// proposer can keep trying for a quorum
-				a.val = cmd.val
-			}
-		}
-		a.show(cmd)
-		cmd.c <- proposal{a.biggest, a.val}
+		go a.handleCmd(cmd)
 	}	
 }
 
