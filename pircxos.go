@@ -17,10 +17,50 @@ import (
 
 var server *string = flag.String("server", "irc.freenode.net", "IRC server address")
 var port *int = flag.Int("port", 6667, "IRC server port")
-var nick *string = flag.String("nick", "go-irc-client", "Nickname")
+var modnick *string = flag.String("nick", "go-irc-client", "Nickname")
+
+type Promise struct {
+	acceptor string
+	val      *string
+}
+
+type Acceptor struct {
+	min       int64   // player promised not to accept proposals less than this
+	paccepted int64   // proposal number of accepted value
+	aVal      *string // the accepted value itself
+}
+
+type Leader struct {
+	lVal     string
+	promises []Promise
+	accepts  []string // players who have accepted proposed value
+}
+
+type Player struct {
+	id   int   // -1 for "not playing"
+	seen int64 // largest proposal number observed so far
+	Acceptor
+	Leader
+}
 
 type PMod struct {
 	ircchan string
+	gameno  int64 // game instance number
+	players map[string]Player
+}
+
+// :wonkawonka!~ecashin@blah.example.com PRIVMSG #pmodtesting :hi
+func nick(privmsg string) string {
+	i := strings.Index(privmsg, ":")
+	j := strings.Index(privmsg, "!")
+	if i < 0 || j < 0 || j-i < 1 {
+		panic("no nick in privmsg")
+	}
+	return privmsg[i+1 : j]
+}
+
+func (pm *PMod) playerstr() string {
+	return fmt.Sprintf("%d", len(pm.players))
 }
 
 func (pm *PMod) handle(send func(string), m string) bool {
@@ -33,8 +73,17 @@ func (pm *PMod) handle(send func(string), m string) bool {
 	}
 	if i > 0 && i+len(search) < len(m) {
 		switch m[i+len(search):] {
-		case "foo":
-			send("PRIVMSG #" + pm.ircchan + " :bar")
+		case "join":
+			nam := nick(m)
+			if _, present := pm.players[nam]; !present {
+				id := len(pm.players)
+				pm.players[nam] = Player{
+					id: id,
+				}
+				pm.gameno++
+				send("PRIVMSG #" + pm.ircchan + fmt.Sprintf(" :NEW GAME: %d", pm.gameno))
+				send("PRIVMSG #" + pm.ircchan + " :Players: " + pm.playerstr())
+			}
 		case "go away":
 			cont = false
 			send("QUIT :going away now")
@@ -56,10 +105,13 @@ func main() {
 		fmt.Println("> " + s)
 		c.ToSend <- s
 	}
-	pm := &PMod{"pmodtesting"}
+	pm := &PMod{
+		ircchan: "pmodtesting",
+		players: make(map[string]Player),
+	}
 
 	quit := make(chan bool)
-	send("NICK " + *nick)
+	send("NICK " + *modnick)
 	send("USER ircctest * * :Ed Cashin")
 	send("JOIN #" + pm.ircchan)
 
