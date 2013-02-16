@@ -34,6 +34,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -60,6 +61,7 @@ type Leader struct {
 
 type Player struct {
 	id   int   // -1 for "not playing"
+	nick string
 	seen int64 // largest proposal number observed so far
 	Acceptor
 	Leader
@@ -71,18 +73,49 @@ type PMod struct {
 	players map[string]Player
 }
 
-// :wonkawonka!~ecashin@blah.example.com PRIVMSG #pmodtesting :hi
-func nick(privmsg string) string {
-	i := strings.Index(privmsg, ":")
-	j := strings.Index(privmsg, "!")
-	if i < 0 || j < 0 || j-i < 1 {
-		panic("no nick in privmsg")
+func (pm *PMod) playerlines() []string {
+	n := len(pm.players)
+	a := make([]string, n+1)
+	i := 0
+	a[i] = fmt.Sprintf("%d players", len(pm.players))
+	i++
+	for nick, v := range pm.players {
+		a[i] = fmt.Sprintf("  id:%d nick:%-15s seen:%d\n", v.id, nick, v.seen)
+		i++
 	}
-	return privmsg[i+1 : j]
+	return a
 }
 
-func (pm *PMod) playerstr() string {
-	return fmt.Sprintf("%d", len(pm.players))
+func (pm *PMod) handleMsg(send func(string), nick, msg string) {
+	ssend := func(s string) {
+		send("PRIVMSG #" + pm.ircchan + " :" + s)
+	}
+	f := strings.Fields(msg)
+	if len(f) < 4 {
+		ssend("uh ... whatever.")
+		return
+	}
+	ircch, game, proposal, op := f[0], f[1], f[2], f[3]
+	if ircch != "#" + pm.ircchan {
+		ssend(nick + ": we're talking in #" + pm.ircchan)
+		return
+	}
+	game = game[1:]
+	g, err := strconv.ParseInt(game, 0, 64)
+	if err != nil || g != pm.gameno {
+		ssend(fmt.Sprintf("we're playing game %d, not %s", pm.gameno, game))
+		return
+	}
+	p, err := strconv.ParseInt(proposal, 0, 64)
+	if err != nil {
+		ssend(fmt.Sprintf("hmm.  \"%s\" doesn't look like a proposal number.", pm.gameno, game))
+		return
+	}
+	switch op {
+	default:
+		ssend("unknown operation: " + op)
+	}
+	ssend(fmt.Sprintf("proposal %d", p))
 }
 
 //  :bobobobono!~ecashin@hosty.example.com JOIN #pmodtesting
@@ -96,32 +129,42 @@ func (pm *PMod) handle(send func(string), m string) bool {
 	cont := true
 	re := regexp.MustCompile(":(\\w+?)!~(\\S+?)@(\\S+?)\\s+(\\S+)\\s+(.*)")
 	g := re.FindStringSubmatch(m)
-	for i, v := range g {
-		log.Println(i, v)
+	if g == nil {
+		return cont
 	}
-	search := " PRIVMSG #" + pm.ircchan + " :"
-	i := strings.Index(m, search)
-	log.Printf("i:%d", i)
-	if i > 0 {
-		log.Printf("m[i+1:] \"%s\"", m[i+1:])
-	}
-	if i > 0 && i+len(search) < len(m) {
-		switch m[i+len(search):] {
-		case "join":
-			nam := nick(m)
-			if _, present := pm.players[nam]; !present {
-				id := len(pm.players)
-				pm.players[nam] = Player{
-					id: id,
-				}
-				pm.gameno++
-				send("PRIVMSG #" + pm.ircchan + fmt.Sprintf(" :NEW GAME: %d", pm.gameno))
-				send("PRIVMSG #" + pm.ircchan + " :Players: " + pm.playerstr())
-			}
-		case "go away":
-			cont = false
-			send("QUIT :going away now")
+	_, nick, user, host, op, rest := g[0], g[1], g[2], g[3], g[4], g[5]
+	log.Println(nick, user, host, op, rest)
+	newgame := func() {
+		pm.gameno++
+		send("PRIVMSG #" + pm.ircchan + fmt.Sprintf(" :NEW GAME: %d", pm.gameno))
+		for _, line := range pm.playerlines() {
+			send("PRIVMSG #" + pm.ircchan + " : " + line)
 		}
+	}
+	switch op {
+	case "JOIN":
+		if _, present := pm.players[nick]; !present {
+			id := len(pm.players)
+			pm.players[nick] = Player{
+				id: id,
+			}
+			newgame()
+		}
+	case "PART":
+		if _, present := pm.players[nick]; present {
+			delete(pm.players, nick)
+			i := 0
+			for k, v := range pm.players {
+				v.id = i
+				pm.players[k] = v
+				i++
+			}
+			newgame()
+		}
+	case "PRIVMSG":
+		pm.handleMsg(send, nick, rest)
+	default:
+		log.Println("unknown op:", op)
 	}
 	return cont
 }
