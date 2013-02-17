@@ -5,7 +5,7 @@
 //
 // Message formats:
 //
-// G P propose		leader (AKA proposer) proposes number P for 
+// G P propose		leader (AKA proposer) proposes number P for
 // 			game G
 //
 // G P promise Q V	acceptor promises not to accept proposal
@@ -13,7 +13,7 @@
 //			proposer that value V has already been accepted
 //			for proposal number Q in game G.  A nil V means
 //			no value has been accepted yet.
-// 
+//
 // G P set V		leader asks acceptors to accept value
 //			V for proposal number P in game G.  It should
 //			be the V with the highest Q with a non-nil V,
@@ -54,13 +54,15 @@ type Acceptor struct {
 }
 
 type Leader struct {
-	lVal     string
-	promises []Promise
-	accepts  []string // players who have accepted proposed value
+	lProposed int64
+	lSet      string    // this Leader did attempt to set this value
+	agenda    string    // value this Leader would like to set
+	promises  []Promise // promises received from Acceptors
+	accepts   []string  // Players who have accepted proposed value
 }
 
 type Player struct {
-	id   int   // -1 for "not playing"
+	id   int // -1 for "not playing"
 	nick string
 	seen int64 // largest proposal number observed so far
 	Acceptor
@@ -70,7 +72,13 @@ type Player struct {
 type PMod struct {
 	ircchan string
 	gameno  int64 // game instance number
-	players map[string]Player
+	players map[string]*Player
+}
+
+func (pm *PMod) newProposed(player *Player, p int64) {
+	player.lProposed = p
+	player.promises = nil
+	player.accepts = nil
 }
 
 func (pm *PMod) playerlines() []string {
@@ -86,36 +94,93 @@ func (pm *PMod) playerlines() []string {
 	return a
 }
 
+var helplines = []string{
+	"this",
+	"is",
+	"help",
+}
+
 func (pm *PMod) handleMsg(send func(string), nick, msg string) {
-	ssend := func(s string) {
+	csend := func(s string) {
 		send("PRIVMSG #" + pm.ircchan + " :" + s)
 	}
+	psend := func(n, s string) {
+		send("PRIVMSG " + n + " :" + s)
+	}
 	f := strings.Fields(msg)
+	if len(f) < 1 {
+		csend("confusing stuff...")
+		return
+	}
+	ircch := f[0]
+	if ircch != "#"+pm.ircchan {
+		csend(nick + ": we're talking in #" + pm.ircchan)
+		return
+	}
+	cmd := f[1]
+	cmd = cmd[1:]
+	switch cmd { // in case it's not a game message but a special command
+	case "status":
+		for _, line := range pm.playerlines() {
+			psend(nick, line)
+		}
+		return
+	case "help":
+		for _, line := range helplines {
+			psend(nick, line)
+		}
+		return
+	}
 	if len(f) < 4 {
-		ssend("uh ... whatever.")
+		csend("uh ... whatever.")
 		return
 	}
-	ircch, game, proposal, op := f[0], f[1], f[2], f[3]
-	if ircch != "#" + pm.ircchan {
-		ssend(nick + ": we're talking in #" + pm.ircchan)
-		return
-	}
-	game = game[1:]
+	game, proposal, op := cmd, f[2], f[3]
 	g, err := strconv.ParseInt(game, 0, 64)
 	if err != nil || g != pm.gameno {
-		ssend(fmt.Sprintf("we're playing game %d, not %s", pm.gameno, game))
+		csend(fmt.Sprintf("we're playing game %d, not %s", pm.gameno, game))
 		return
 	}
 	p, err := strconv.ParseInt(proposal, 0, 64)
 	if err != nil {
-		ssend(fmt.Sprintf("hmm.  \"%s\" doesn't look like a proposal number.", pm.gameno, game))
+		csend(fmt.Sprintf("hmm.  \"%s\" doesn't look like a proposal number.", pm.gameno, game))
+		return
+	}
+	talker, present := pm.players[nick]
+	if !present {
+		csend(nick + ": you're not playing.  try re-joining " + pm.ircchan)
 		return
 	}
 	switch op {
+	case "propose":
+		if p%int64(len(pm.players)) != int64(talker.id) {
+			rsp := nick + ": you can only use proposal numbers that are "
+			rsp += fmt.Sprintf("%d modulo %d", talker.id, len(pm.players))
+			csend(rsp)
+			csend("everybody ignore " + nick + "'s proposal, please")
+			csend("It's like that didn't happen.")
+			return
+		}
+		oldp := pm.players[nick].lProposed
+		if oldp != p {
+			if oldp > p {
+				csend(fmt.Sprintf("%s: %s %d when you already proposed %d?",
+					nick, "why are you proposing", p, pm.players[nick].lProposed))
+				csend("i'm going to forget about the old one")
+			}
+			pm.newProposed(pm.players[nick], p)
+		}
+		pm.players[nick].lProposed = p
+		for k, _ := range pm.players {
+			if p > pm.players[k].seen {
+				pm.players[k].seen = p
+			}
+		}
+	case "set":
+		csend("set operation not implemented")
 	default:
-		ssend("unknown operation: " + op)
+		csend("unknown operation: " + op)
 	}
-	ssend(fmt.Sprintf("proposal %d", p))
 }
 
 //  :bobobobono!~ecashin@hosty.example.com JOIN #pmodtesting
@@ -145,7 +210,7 @@ func (pm *PMod) handle(send func(string), m string) bool {
 	case "JOIN":
 		if _, present := pm.players[nick]; !present {
 			id := len(pm.players)
-			pm.players[nick] = Player{
+			pm.players[nick] = &Player{
 				id: id,
 			}
 			newgame()
@@ -154,9 +219,8 @@ func (pm *PMod) handle(send func(string), m string) bool {
 		if _, present := pm.players[nick]; present {
 			delete(pm.players, nick)
 			i := 0
-			for k, v := range pm.players {
+			for _, v := range pm.players {
 				v.id = i
-				pm.players[k] = v
 				i++
 			}
 			newgame()
@@ -184,7 +248,7 @@ func main() {
 	}
 	pm := &PMod{
 		ircchan: "pmodtesting",
-		players: make(map[string]Player),
+		players: make(map[string]*Player),
 	}
 
 	quit := make(chan bool)
