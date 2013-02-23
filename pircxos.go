@@ -49,13 +49,13 @@ type Promise struct {
 
 type Acceptor struct {
 	min       int64   // player promised not to accept proposals less than this
-	paccepted int64   // proposal number of accepted value
+	pAccepted int64   // proposal number of accepted value
 	aVal      *string // the accepted value itself
 }
 
 type Leader struct {
 	lProposed int64
-	lSet      string    // this Leader did attempt to set this value
+	lSet      *string    // this Leader did attempt to set this value
 	agenda    string    // value this Leader would like to set
 	promises  []Promise // promises received from Acceptors
 	accepts   []string  // Players who have accepted proposed value
@@ -100,6 +100,49 @@ var helplines = []string{
 	"help",
 }
 
+func (pm *PMod) maxProposal() int64 {
+	prop := int64(-1)
+	for _, p := range pm.players {
+		if p.seen > prop {
+			prop = p.seen
+		}
+	}
+	return prop
+}
+
+func (pm *PMod) quorumAccepted(nick string, proposal int64) (bool, string) {
+	pl, present := pm.players[nick]
+	if !present {
+		return false, nick + " is not playing"
+	}
+	if pl.lProposed != proposal {
+		return false, fmt.Sprintf("%s proposed %d, not %d", nick, pl.lProposed, proposal)
+	}
+	maj := len(pm.players) + 1
+	if len(pl.promises) < maj {
+		return false, fmt.Sprintf("%s received only %d of %d required promises",
+			nick, len(pl.promises), maj)
+	}
+	return true, "ok"
+}
+
+func (pm *PMod) wasSet(prop int64, val string) bool {
+	pset := false
+	valseen := false
+	for _, pl := range pm.players {
+		if pl.lSet == nil {
+			continue
+		}
+		if pl.lProposed == prop {
+			pset = true
+		}
+		if *pl.lSet == val {
+			valseen = true
+		}
+	}
+	return pset && valseen
+}
+
 func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 	csend := func(s string) {
 		send("PRIVMSG #" + pm.ircchan + " :" + s)
@@ -138,12 +181,16 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 	game, proposal, op := cmd, f[2], f[3]
 	g, err := strconv.ParseInt(game, 0, 64)
 	if err != nil || g != pm.gameno {
-		csend(fmt.Sprintf("we're playing game %d, not %s", pm.gameno, game))
+		csend(fmt.Sprintf("please ignore %s saying \"%s\".  we're playing game %d",
+			nick, game, pm.gameno))
 		return
 	}
 	p, err := strconv.ParseInt(proposal, 0, 64)
 	if err != nil {
-		csend(fmt.Sprintf("hmm.  \"%s\" doesn't look like a proposal number.", pm.gameno, game))
+		csend(fmt.Sprintf("hmm.  \"%s\" doesn't look like a proposal number.",
+			proposal))
+		csend(fmt.Sprintf("the max proposal number used for game %d was %d.",
+			pm.gameno, pm.maxProposal()))
 		return
 	}
 	talker, present := pm.players[nick]
@@ -162,22 +209,58 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 			return
 		}
 		oldp := pm.players[nick].lProposed
-		if oldp != p {
-			if oldp > p {
-				csend(fmt.Sprintf("%s: %s %d when you already proposed %d?",
-					nick, "why are you proposing", p, pm.players[nick].lProposed))
-				csend("i'm going to forget about the old one")
-			}
-			pm.newProposed(pm.players[nick], p)
+		if oldp > p {
+			csend(fmt.Sprintf("%s: %s %d when you already proposed %d?",
+				nick, "why are you proposing", p, pm.players[nick].lProposed))
+			csend(fmt.Sprintf("folks, please forget %s mentioned %d",
+				nick, p))
+			return
 		}
-		pm.players[nick].lProposed = p
+		pm.newProposed(pm.players[nick], p)
 		for k, _ := range pm.players {
 			if p > pm.players[k].seen {
 				pm.players[k].seen = p
 			}
 		}
+	case "promise":
+		if !pm.wasProposed(p) {
+			csend(fmt.Sprintf("hey, %s!  %d was never proposed", nick, p))
+			return
+		}
+		pl := pm.players[nick]
+		if pl.min > p {
+			csend(fmt.Sprintf("%s has already promised not to accept proposals below %d",
+				nick, pl.min))
+			csend(fmt.Sprintf("so ... although not illegal, it's weird to promise for %d",
+				p))
+		} else {
+			pl.min = p
+		}
+		// XXXtodo: don't allow acceptance of lower than promised
+		//	... and check that this implementation of promise is complete
 	case "set":
-		csend("set operation not implemented")
+		if q, why := pm.quorumAccepted(nick, p); !q {
+			csend(fmt.Sprintf("%s can't set a value until a majority has promised on proposal %d", nick, p))
+			csend("  " + why)
+			return
+		}
+		s := strings.Join(f[4:], " ")
+		pm.players[nick].lSet = &s
+	case "accept":
+		val := strings.Join(f[4:], " ")
+		if !pm.wasSet(p, val) {
+			csend(fmt.Sprintf("%s can't accept value for proposal %d that was never set",
+				nick, p))
+			return
+		}
+		a := pm.players[nick]
+		if a.aVal != nil && a.pAccepted < p && *a.aVal != val {
+			csend(fmt.Sprintf("%s, you already accepted a value for proposal %d, with the value below:",
+				nick, a.pAccepted))
+			csend("  \"" + *a.aVal + "\"")
+			csend("you can't accept a different lower-proposal-number value")
+		}
+		a.aVal = &val
 	default:
 		csend("unknown operation: " + op)
 	}
