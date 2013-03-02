@@ -44,6 +44,7 @@ var modnick *string = flag.String("nick", "go-irc-client", "Nickname")
 
 type Promise struct {
 	acceptor string
+	proposal int64
 	val      *string
 }
 
@@ -54,7 +55,7 @@ type Acceptor struct {
 }
 
 type Leader struct {
-	lProposed int64
+	lProposed int64      // this Leader did issue this proposal number
 	lSet      *string    // this Leader did attempt to set this value
 	agenda    string    // value this Leader would like to set
 	promises  []Promise // promises received from Acceptors
@@ -79,6 +80,15 @@ func (pm *PMod) newProposed(player *Player, p int64) {
 	player.lProposed = p
 	player.promises = nil
 	player.accepts = nil
+}
+
+func (pm *PMod) wasProposed(p int64) bool {
+	for _, pl := range pm.players {
+		if pl.lProposed == p {
+			return true
+		}
+	}
+	return false
 }
 
 func (pm *PMod) playerlines() []string {
@@ -110,20 +120,30 @@ func (pm *PMod) maxProposal() int64 {
 	return prop
 }
 
-func (pm *PMod) quorumAccepted(nick string, proposal int64) (bool, string) {
+// returns:
+// 1. whether a quorum have promised to accept no lower proposal
+// 2. the Promise with the highest-number proposal accepted
+// 3. an explanation if 1. is false
+func (pm *PMod) quorumPromised(nick string, proposal int64) (bool, *Promise, string) {
 	pl, present := pm.players[nick]
 	if !present {
-		return false, nick + " is not playing"
+		return false, nil, nick + " is not playing"
 	}
 	if pl.lProposed != proposal {
-		return false, fmt.Sprintf("%s proposed %d, not %d", nick, pl.lProposed, proposal)
+		return false, nil, fmt.Sprintf("%s proposed %d, not %d", nick, pl.lProposed, proposal)
 	}
-	maj := len(pm.players) + 1
+	maj := len(pm.players) / 2 + 1
 	if len(pl.promises) < maj {
-		return false, fmt.Sprintf("%s received only %d of %d required promises",
+		return false, nil, fmt.Sprintf("%s received only %d of %d required promises",
 			nick, len(pl.promises), maj)
 	}
-	return true, "ok"
+	var max *Promise
+	for _, v := range pl.promises {
+		if v.val != nil && (max == nil || v.proposal > max.proposal) {
+			max = &v
+		}
+	}
+	return true, max, "ok"
 }
 
 func (pm *PMod) wasSet(prop int64, val string) bool {
@@ -239,13 +259,20 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 		// XXXtodo: don't allow acceptance of lower than promised
 		//	... and check that this implementation of promise is complete
 	case "set":
-		if q, why := pm.quorumAccepted(nick, p); !q {
+		q, accepted, why := pm.quorumPromised(nick, p)
+		if !q {
 			csend(fmt.Sprintf("%s can't set a value until a majority has promised on proposal %d", nick, p))
 			csend("  " + why)
 			return
 		}
-		s := strings.Join(f[4:], " ")
-		pm.players[nick].lSet = &s
+		if accepted.val != nil {
+			csend(fmt.Sprintf("%s, you have to set the value below, because it was accepted by %s as proposal %d", nick, accepted.acceptor, accepted.proposal))
+			csend("\""+*accepted.val+"\"")
+		} else {
+			s := strings.Join(f[4:], " ")
+			pm.players[nick].lSet = &s
+			// now it's up to the acceptors to accept
+		}
 	case "accept":
 		val := strings.Join(f[4:], " ")
 		if !pm.wasSet(p, val) {
