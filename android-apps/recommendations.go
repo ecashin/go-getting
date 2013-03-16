@@ -16,10 +16,11 @@
 //  package.
 
 package main
+
 import (
 	"bytes"
-	"encoding/hex"
 	"compress/gzip"
+	"encoding/hex"
 	"io"
 	"os"
 )
