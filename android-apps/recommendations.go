@@ -1,3 +1,20 @@
+//  android-apps/recommendations.go - Sam Rowe's Android app list
+//
+//  When I tweeted about my new Android phone, my friend Sam Rowe sent
+//  me a list of recommended apps.  His email said, "Here's the fun
+//  version.  Let me know if you need the unfun version."
+//
+//  An earlier version of this program printed a histogram of the bytes
+//  formed by interpreting each pair of characters in the string below as
+//  a hex byte.  The distribution was pretty even, suggesting compression
+//  or encryption was involved, assuming it really was his list of app
+//  recommendations.
+//
+//  Fortunately, it was compression, not encryption.  The program below
+//  uses the hex package to turn the ASCII pairs into bytes, and then
+//  io.Copy sends to standard output the data from a Reader from the gzip
+//  package.
+
 package main
 import (
 	"bytes"

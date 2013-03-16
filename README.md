@@ -4,6 +4,14 @@ go-getting
 Exercises in learning the Go programming language
 
 
+android-apps/recommendations.go - Sam Rowe's Android app list
+
+  When I tweeted about my new Android phone, my friend Sam Rowe sent
+  me a list of recommended apps.  His email said, "Here's the fun
+  version.  Let me know if you need the unfun version."
+
+  More details are in the program.
+
 bakery.go - Go implementation of 1974 Lamport bakery algorithm
 
   Leslie Lamport, author of the LaTeX macropackage for Don Knuth's TeX
