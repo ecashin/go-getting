@@ -3,12 +3,6 @@
 //
 // GOPATH="$HOME"/git/go-irc go run pircxos.go
 //
-// G P promise Q V	acceptor promises not to accept proposal
-// 			with number less than P in game G, telling
-//			proposer that value V has already been accepted
-//			for proposal number Q in game G.  A nil V means
-//			no value has been accepted yet.
-//
 // G P set V		leader asks acceptors to accept value
 //			V for proposal number P in game G.  It should
 //			be the V with the highest Q with a non-nil V,
@@ -36,8 +30,17 @@ import (
 // Message formats:
 //
 const proposalFormat = `
-G P propose             leader (AKA proposer) proposes number P for
-                        game G
+G P propose
+        leader (AKA proposer) proposes number P for
+        game G
+`
+const promiseFormat = `
+G P promise Q V
+       acceptor promises not to accept proposal
+       with number less than P in game G, telling
+       proposer that value V has already been accepted
+       for proposal number Q in game G.  A nil V means
+       no value has been accepted yet.
 `
 
 var server *string = flag.String("server", "irc.freenode.net", "IRC server address")
@@ -169,12 +172,27 @@ func (pm *PMod) isInvalidProposal(f []string) bool {
 	return len(f) > 0
 }
 
+// empty value is OK
+func (pm *PMod) isInvalidPromise(f []string) bool {
+	if len(f) == 0 {
+		return false
+	}
+	fmt.Println("parseint: ", f[0])
+	if _, err := strconv.ParseInt(f[0], 0, 64); err != nil {
+		return true
+	}
+	return false
+}
+
 func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 	csend := func(s string) {
 		send("PRIVMSG #" + pm.ircchan + " :" + s)
 	}
 	csendm := func(s string) {
 		for _, i := range strings.Split(s, "\n") {
+			if i == "" {
+				i = " "
+			}
 			csend(i)
 		}
 	}
@@ -231,7 +249,7 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 	}
 	switch op {
 	case "propose":
-		if pm.isInvalidProposal(f[3:]) {
+		if pm.isInvalidProposal(f[4:]) {
 			csend(fmt.Sprintf("uh, %s, the format for proposals is:", nick))
 			csendm(proposalFormat)
 			return
@@ -259,6 +277,11 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 			}
 		}
 	case "promise":
+		if pm.isInvalidPromise(f[4:]) {
+			csend(fmt.Sprintf("well, %s, the format for promises is:", nick))
+			csendm(promiseFormat)
+			return
+		}
 		if !pm.wasProposed(p) {
 			csend(fmt.Sprintf("hey, %s!  %d was never proposed", nick, p))
 			return
