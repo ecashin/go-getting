@@ -256,8 +256,8 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 		} else {
 			pl.min = p
 		}
-		// XXXtodo: don't allow acceptance of lower than promised
-		//	... and check that this implementation of promise is complete
+		// XXXtodo: 
+		//   check that this implementation of promise is complete
 	case "set":
 		q, accepted, why := pm.quorumPromised(nick, p)
 		if !q {
@@ -281,11 +281,16 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 			return
 		}
 		a := pm.players[nick]
+		if a.min > p {
+			csend(fmt.Sprintf("%s, you promised not to accept any proposal less than %d", a.min)
+			return
+		}
 		if a.aVal != nil && a.pAccepted < p && *a.aVal != val {
 			csend(fmt.Sprintf("%s, you already accepted a value for proposal %d, with the value below:",
 				nick, a.pAccepted))
 			csend("  \"" + *a.aVal + "\"")
 			csend("you can't accept a different lower-proposal-number value")
+			return
 		}
 		a.aVal = &val
 	default:

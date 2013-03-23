@@ -62,4 +62,4 @@ l77rw1.go - concurrent multiple readers / single writer
 
   based on Leslie Lamport's 1977 paper, "Concurrent Reading and Writing"
 
-bpaxos.go - basic Paxos implementation
+paxos/bpaxos.go - basic Paxos implementation
