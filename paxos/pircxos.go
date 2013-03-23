@@ -282,7 +282,7 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 		}
 		a := pm.players[nick]
 		if a.min > p {
-			csend(fmt.Sprintf("%s, you promised not to accept any proposal less than %d", a.min)
+			csend(fmt.Sprintf("%s, you promised not to accept any proposal less than %d", a.min))
 			return
 		}
 		if a.aVal != nil && a.pAccepted < p && *a.aVal != val {
