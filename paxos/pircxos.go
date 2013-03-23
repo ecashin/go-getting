@@ -3,11 +3,6 @@
 //
 // GOPATH="$HOME"/git/go-irc go run pircxos.go
 //
-// Message formats:
-//
-// G P propose		leader (AKA proposer) proposes number P for
-// 			game G
-//
 // G P promise Q V	acceptor promises not to accept proposal
 // 			with number less than P in game G, telling
 //			proposer that value V has already been accepted
@@ -37,6 +32,13 @@ import (
 	"strconv"
 	"strings"
 )
+
+// Message formats:
+//
+const proposalFormat = `
+G P propose             leader (AKA proposer) proposes number P for
+                        game G
+`
 
 var server *string = flag.String("server", "irc.freenode.net", "IRC server address")
 var port *int = flag.Int("port", 6667, "IRC server port")
@@ -163,9 +165,18 @@ func (pm *PMod) wasSet(prop int64, val string) bool {
 	return pset && valseen
 }
 
+func (pm *PMod) isInvalidProposal(f []string) bool {
+	return len(f) > 0
+}
+
 func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 	csend := func(s string) {
 		send("PRIVMSG #" + pm.ircchan + " :" + s)
+	}
+	csendm := func(s string) {
+		for _, i := range strings.Split(s, "\n") {
+			csend(i)
+		}
 	}
 	psend := func(n, s string) {
 		send("PRIVMSG " + n + " :" + s)
@@ -220,6 +231,11 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 	}
 	switch op {
 	case "propose":
+		if pm.isInvalidProposal(f[3:]) {
+			csend(fmt.Sprintf("uh, %s, the format for proposals is:", nick))
+			csendm(proposalFormat)
+			return
+		}
 		if p%int64(len(pm.players)) != int64(talker.id) {
 			rsp := nick + ": you can only use proposal numbers that are "
 			rsp += fmt.Sprintf("%d modulo %d", talker.id, len(pm.players))
