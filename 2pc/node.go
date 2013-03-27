@@ -83,9 +83,6 @@ func main() {
 	// the coordinator gets different messages than the drone
 	for {
 		s := <-c
-		if s == "EOF" {
-			break
-		}
 		f := strings.Fields(s)
 		switch strings.ToLower(f[0]) {
 		// messages sent to coordinator:
