@@ -85,6 +85,8 @@ func main() {
 		s := <-c
 		f := strings.Fields(s)
 		switch strings.ToLower(f[0]) {
+		default:
+			c <- (f[0] + " not good for me\n")
 		// messages sent to coordinator:
 		case "request":
 			switch state {
