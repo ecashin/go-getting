@@ -1,5 +1,5 @@
 // node.go - two-phase commit demo
-// There's the coordinator and the drone.
+// There's the coordinator and the cohort.
 
 package main
 
@@ -9,9 +9,11 @@ import (
 	"fmt"
 //	"io"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 func serve(c chan string) {
@@ -56,18 +58,23 @@ func startLog() *log.Logger {
 	return log.New(outlog, "", log.LstdFlags|log.Lmicroseconds)
 }
 
+func pause() {
+	time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+}
+
 var laddr string
 var coordinate bool	// XXXunfinished: not enforced
 var value = "(unset value)"
 
 func init() {
 	flag.StringVar(&laddr, "p", "127.0.0.1:9999",
-		"the laddr to talk to")
+		"the laddr to listen on")
 	flag.BoolVar(&coordinate, "c", false,
 		"whether to be the coordinator")
 }
 func main() {
 	flag.Parse()
+	rand.Seed(time.Now().UnixNano())
 
 	// this is the two-phase commit log on stable storage
 	l := startLog()
@@ -80,7 +87,7 @@ func main() {
 	state := "listening"
 	req := "(no request)"
 
-	// the coordinator gets different messages than the drone
+	// the coordinator gets different messages than the cohort
 	for {
 		s := <-c
 		f := strings.Fields(s)
@@ -102,10 +109,17 @@ func main() {
 		case "yes":
 			switch state {
 			case "prep":
-				msg := fmt.Sprintf("commit %s", req)
+				final := "commit"
+				if rand.Intn(10) > 6 {
+					final = "abort"
+				}
+				msg := fmt.Sprintf("%s %s", final, req)
 				l.Print(msg)
-				value = req
+				if final == "commit" {
+					value = req
+				}
 				state = "listening"
+				pause()
 				c <- (msg + "\n")
 			default:
 				log.Panic("wasn't preparing")
@@ -121,14 +135,46 @@ func main() {
 			default:
 				log.Panic("wasn't preparing")
 			}
-			log.Print("drone talking")
 		// messages sent from coordinator:
 		case "prepare":
-			log.Fatal("coordinator talking")
+			switch state {
+			case "listening":
+				agree := "yes"
+				if rand.Intn(10) > 6 {
+					agree = "no"
+				}
+				msg := fmt.Sprintf("%s %s", agree, req)
+				l.Print(msg)
+				if agree == "yes" {
+					state = "uncertain"
+				} else {
+					state = "listening"
+				}
+			default:
+				log.Fatal("cohort wasn't listening")
+			}
 		case "commit":
-			log.Fatal("coordinator talking")
+			switch state {
+			case "uncertain":
+				l.Print("commit " + req)
+				// Some 2pc implementations send ACK here
+				// to help the coordinator clean up, since
+				// ACKs from all cohorts means nobody will
+				// ever be uncertain and asking about this
+				// transaction.
+				value = req
+				state = "listening"
+			default:
+				log.Fatal("cohort wasn't uncertain")
+			}
 		case "abort":
-			log.Fatal("coordinator talking")
+			switch state {
+			case "uncertain":
+				l.Print("abort " + req)
+				state = "listening"
+			default:
+				log.Fatal("cohort wasn't uncertain")
+			}
 		// messages that are not part of 2PC but are handy
 		case "peek":
 			c <- (value + "\n")
