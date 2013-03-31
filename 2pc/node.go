@@ -1,5 +1,6 @@
 // node.go - two-phase commit demo
 // There's the coordinator and the cohort.
+// This is a presume-abort variant of the 2PC. (See Lampson and Lomet 1993)
 
 package main
 
@@ -16,8 +17,8 @@ import (
 	"time"
 )
 
-func serve(c chan string) {
-	la, err := net.ResolveUDPAddr("udp4", laddr)
+func serve(c chan string, myAddr string) {
+	la, err := net.ResolveUDPAddr("udp4", myAddr)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -32,7 +33,7 @@ func serve(c chan string) {
 			log.Panic(err)
 		}
 		s := string(buf[:n])
-		log.Printf("%s says %s", raddr, s)
+		log.Printf("serve: %s says %s", raddr, s)
 		c <- s
 		rsp := <- c
 		log.Printf("responding to %s with %s", raddr, rsp)
@@ -41,7 +42,34 @@ func serve(c chan string) {
 			log.Panic(err)
 		}
 	}
-	c <- "EOF"
+}
+
+func dial(client, stateMach chan string, theirAddr string) {
+	conn, err := net.Dial("udp", theirAddr)
+	if err != nil {
+		log.Panic(err)
+	}
+	defer conn.Close()
+	buf := make([]byte, 9999)
+	for {
+		var msg string
+		select {
+		case msg = <- stateMach:
+		case msg = <- client:
+		}
+		log.Printf("sending \"%s\"", msg)
+		_, err := conn.(*net.UDPConn).Write([]byte(msg))
+		if err != nil {
+			log.Panic(err)
+		}
+		n, raddr, err := conn.(*net.UDPConn).ReadFromUDP(buf)
+		if err != nil {
+			log.Panic(err)
+		}
+		s := string(buf[:n])
+		log.Printf("dial: %s says %s", raddr, s)
+		stateMach <- s
+	}
 }
 
 func startLog() *log.Logger {
@@ -62,14 +90,13 @@ func pause() {
 	time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
 }
 
-var laddr string
-var coordinate bool	// XXXunfinished: not enforced
+const coordAddr = "127.0.0.1:9898"
+const cohortAddr = "127.0.0.1:9999"
+var doCoordinate bool
 var value = "(unset value)"
 
 func init() {
-	flag.StringVar(&laddr, "p", "127.0.0.1:9999",
-		"the laddr to listen on")
-	flag.BoolVar(&coordinate, "c", false,
+	flag.BoolVar(&doCoordinate, "c", false,
 		"whether to be the coordinator")
 }
 func main() {
@@ -80,20 +107,35 @@ func main() {
 	l := startLog()
 	l.Print("starting log")
 
-	c := make(chan string)
-	go serve(c)
-	log.Print("started server")
+	srvc := make(chan string)
+	dialc := make(chan string)
+	if doCoordinate {
+		go serve(srvc, coordAddr)
+		log.Print("started server on ", coordAddr)
+		go dial(srvc, dialc, cohortAddr)
+		log.Print("started dialer to ", cohortAddr)
+	} else {
+		go serve(srvc, cohortAddr)
+		log.Print("started server on ", cohortAddr)
+	}
 
 	state := "listening"
 	req := "(no request)"
 
 	// the coordinator gets different messages than the cohort
 	for {
-		s := <-c
+		var s string
+		var cp *chan string
+		select {
+		case s = <-srvc:
+			cp = &srvc
+		case s = <-dialc:
+			cp = &dialc
+		}
 		f := strings.Fields(s)
 		switch strings.ToLower(f[0]) {
 		default:
-			c <- (f[0] + " not good for me\n")
+			*cp <- (f[0] + " not good for me\n")
 		// messages sent to coordinator:
 		case "request":
 			switch state {
@@ -102,7 +144,7 @@ func main() {
 				msg := fmt.Sprintf("prepare %s", req)
 				l.Print(msg)
 				state = "prep"
-				c <- (msg + "\n")
+				dialc <- msg
 			default:
 				log.Panic("wasn't listening")
 			}
@@ -120,7 +162,12 @@ func main() {
 				}
 				state = "listening"
 				pause()
-				c <- (msg + "\n")
+				*cp <- msg
+				if final == "commit" {
+					srvc <- ("OK" + "\n")
+				} else {
+					srvc <- ("SORRY" + "\n")
+				}
 			default:
 				log.Panic("wasn't preparing")
 			}
@@ -131,7 +178,7 @@ func main() {
 				l.Print(msg)
 				state = "listening"
 				// old value unaffected by transaction
-				c <- (msg + "\n")
+				*cp <- msg
 			default:
 				log.Panic("wasn't preparing")
 			}
@@ -143,13 +190,15 @@ func main() {
 				if rand.Intn(10) > 6 {
 					agree = "no"
 				}
-				msg := fmt.Sprintf("%s %s", agree, req)
+				msg := agree
 				l.Print(msg)
 				if agree == "yes" {
 					state = "uncertain"
 				} else {
 					state = "listening"
 				}
+				pause()
+				*cp <- msg
 			default:
 				log.Fatal("cohort wasn't listening")
 			}
@@ -169,15 +218,14 @@ func main() {
 			}
 		case "abort":
 			switch state {
-			case "uncertain":
+			case "listening":
 				l.Print("abort " + req)
-				state = "listening"
 			default:
-				log.Fatal("cohort wasn't uncertain")
+				log.Fatal("cohort wasn't listening")
 			}
 		// messages that are not part of 2PC but are handy
 		case "peek":
-			c <- (value + "\n")
+			*cp <- (value + "\n")
 		case "quit":
 			log.Fatal("quitting by remote request")
 		}
