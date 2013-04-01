@@ -179,6 +179,7 @@ func main() {
 				state = "listening"
 				// old value unaffected by transaction
 				*cp <- msg
+				srvc <- ("SORRY" + "\n")
 			default:
 				log.Panic("wasn't preparing")
 			}
