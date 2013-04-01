@@ -1,6 +1,10 @@
 // node.go - two-phase commit demo
 // There's the coordinator and the cohort.
 // This is a presume-abort variant of the 2PC. (See Lampson and Lomet 1993)
+//
+// The coordinator listens for requests from clients, and it
+// dials the (sole, for now) cohort.  The cohort listens for
+// messages from the coordinator.
 
 package main
 
