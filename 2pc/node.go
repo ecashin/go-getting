@@ -87,7 +87,7 @@ func startLog() *log.Logger {
 }
 
 func pause() {
-	time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+	time.Sleep(time.Duration(rand.Intn(400)) * time.Millisecond)
 }
 
 const coordAddr = "127.0.0.1:9898"
