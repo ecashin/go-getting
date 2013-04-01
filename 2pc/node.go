@@ -137,7 +137,7 @@ func main() {
 		default:
 			*cp <- (f[0] + " not good for me\n")
 		// messages sent to coordinator:
-		case "request":
+		case "req":
 			switch state {
 			case "listening":
 				req = strings.Join(f[1:], " ")
