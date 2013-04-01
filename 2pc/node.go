@@ -48,7 +48,7 @@ func serve(c chan string, myAddr string) {
 	}
 }
 
-func dial(client, stateMach chan string, theirAddr string) {
+func dial(stateMach chan string, theirAddr string) {
 	conn, err := net.Dial("udp", theirAddr)
 	if err != nil {
 		log.Panic(err)
@@ -56,11 +56,7 @@ func dial(client, stateMach chan string, theirAddr string) {
 	defer conn.Close()
 	buf := make([]byte, 9999)
 	for {
-		var msg string
-		select {
-		case msg = <- stateMach:
-		case msg = <- client:
-		}
+		msg := <- stateMach
 		log.Printf("dial: sending \"%s\" to %s", msg, theirAddr)
 		_, err := conn.(*net.UDPConn).Write([]byte(msg))
 		if err != nil {
@@ -116,7 +112,7 @@ func main() {
 	if doCoordinate {
 		go serve(srvc, coordAddr)
 		log.Print("started server on ", coordAddr)
-		go dial(srvc, dialc, cohortAddr)
+		go dial(dialc, cohortAddr)
 		log.Print("started dialer to ", cohortAddr)
 	} else {
 		go serve(srvc, cohortAddr)
