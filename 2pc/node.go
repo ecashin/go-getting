@@ -186,6 +186,13 @@ func main() {
 			default:
 				log.Panic("wasn't preparing")
 			}
+		case "ack":
+			switch state {
+			case "listening":
+				// listen for more requests from clients
+			default:
+				log.Panic("wasn't listening")
+			}
 		// messages sent from coordinator:
 		case "prepare":
 			switch state {
@@ -210,13 +217,9 @@ func main() {
 			switch state {
 			case "uncertain":
 				l.Print("commit " + req)
-				// Some 2pc implementations send ACK here
-				// to help the coordinator clean up, since
-				// ACKs from all cohorts means nobody will
-				// ever be uncertain and asking about this
-				// transaction.
 				value = req
 				state = "listening"
+				*cp <- "ack"
 			default:
 				log.Fatal("cohort wasn't uncertain")
 			}
@@ -225,8 +228,10 @@ func main() {
 			case "uncertain":
 				l.Print("abort " + req)
 				state = "listening"
+				*cp <- "ack"
 			case "listening":
 				l.Print("abort " + req)
+				*cp <- "ack"
 			default:
 				log.Fatal("cohort wasn't listening")
 			}
