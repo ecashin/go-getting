@@ -222,6 +222,9 @@ func main() {
 			}
 		case "abort":
 			switch state {
+			case "uncertain":
+				l.Print("abort " + req)
+				state = "listening"
 			case "listening":
 				l.Print("abort " + req)
 			default:
