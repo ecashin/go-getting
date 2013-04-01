@@ -37,10 +37,10 @@ func serve(c chan string, myAddr string) {
 			log.Panic(err)
 		}
 		s := string(buf[:n])
-		log.Printf("serve: %s says %s", raddr, s)
+		log.Printf("serve: %s says %s; sending to state machine", raddr, s)
 		c <- s
 		rsp := <- c
-		log.Printf("responding to %s with %s", raddr, rsp)
+		log.Printf("serve: responding to %s with %s", raddr, rsp)
 		_, err = conn.WriteToUDP([]byte(rsp), raddr)
 		if err != nil {
 			log.Panic(err)
@@ -61,7 +61,7 @@ func dial(client, stateMach chan string, theirAddr string) {
 		case msg = <- stateMach:
 		case msg = <- client:
 		}
-		log.Printf("sending \"%s\"", msg)
+		log.Printf("dial: sending \"%s\" to %s", msg, theirAddr)
 		_, err := conn.(*net.UDPConn).Write([]byte(msg))
 		if err != nil {
 			log.Panic(err)
@@ -71,7 +71,7 @@ func dial(client, stateMach chan string, theirAddr string) {
 			log.Panic(err)
 		}
 		s := string(buf[:n])
-		log.Printf("dial: %s says %s", raddr, s)
+		log.Printf("dial: %s says %s; sending to state machine", raddr, s)
 		stateMach <- s
 	}
 }
