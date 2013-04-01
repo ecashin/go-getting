@@ -3,6 +3,11 @@ go-getting
 
 Exercises in learning the Go programming language
 
+2pc/node.go - Presume-abort two-phase commit
+
+  This is a UDP-based proof-of-concept implementation of the simple
+  and popular two-phase commit protocol.  It uses three processes as
+  illustrated in the example usage at the top of the source.
 
 android-apps/recommendations.go - Sam Rowe's Android app list
 
