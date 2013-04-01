@@ -1,10 +1,15 @@
 // node.go - two-phase commit demo
 // There's the coordinator and the cohort.
-// This is a presume-abort variant of the 2PC. (See Lampson and Lomet 1993)
+// This is a presume-abort variant of the 2PC. (Lampson and Lomet 1993)
 //
 // The coordinator listens for requests from clients, and it
 // dials the (sole, for now) cohort.  The cohort listens for
 // messages from the coordinator.
+//
+// Example usage with three processes on term1, term2, term3:
+// term1$ go run node.go -c	# run the coordinator
+// term2$ go run node.go	# run the cohort
+// term3$ nc -u localhost 9898	# interact with coordinator
 
 package main
 
