@@ -10,6 +10,10 @@
 // term1$ go run node.go -c	# run the coordinator
 // term2$ go run node.go	# run the cohort
 // term3$ nc -u localhost 9898	# interact with coordinator
+//
+// By default, there will be some simulated drops of packets.
+// You can use the "-d" option to specify a ratio of drops to
+// total packets.
 
 package main
 
@@ -42,6 +46,9 @@ func serve(c chan string, myAddr string) {
 			log.Panic(err)
 		}
 		s := string(buf[:n])
+		if len(strings.Fields(s)) == 0 {
+			continue
+		}
 		log.Printf("serve: %s says %s; sending to state machine", raddr, s)
 		c <- s
 		rsp := <- c
@@ -58,7 +65,7 @@ func serve(c chan string, myAddr string) {
 func drop() bool {
 	d := rand.Float64() <= dropRatio
 	if (d) {
-		log.Print("packet drop!")
+		log.Print("packet DROP!")
 	}
 	return d
 }
@@ -70,6 +77,7 @@ func dial(stateMach chan string, theirAddr string) {
 	}
 	defer conn.Close()
 	buf := make([]byte, 9999)
+	udp := make(chan string)
 	for {
 		msg := <- stateMach
 		log.Printf("dial: sending \"%s\" to %s", msg, theirAddr)
@@ -79,12 +87,24 @@ func dial(stateMach chan string, theirAddr string) {
 				log.Panic(err)
 			}
 		}
-		n, raddr, err := conn.(*net.UDPConn).ReadFromUDP(buf)
-		if err != nil {
-			log.Panic(err)
+		var raddr *net.UDPAddr
+		var err error
+		go func() {
+			var n int
+			n, raddr, err = conn.(*net.UDPConn).ReadFromUDP(buf)
+			if err != nil {
+				log.Panic(err)
+			}
+			udp <- string(buf[:n])
+		} ()
+		var s string
+		select {
+		case <- time.After(2*time.Second):
+			s = "timeout"
+			log.Print("dial: TIMEOUT reading from UDP")
+		case s = <- udp:
+			log.Printf("dial: %s says %s; sending to state machine", raddr, s)
 		}
-		s := string(buf[:n])
-		log.Printf("dial: %s says %s; sending to state machine", raddr, s)
 		stateMach <- s
 	}
 }
@@ -210,7 +230,40 @@ func main() {
 			default:
 				log.Panic("wasn't listening")
 			}
+		// internal messages:
+		case "timeout":
+			if doCoordinate {
+				switch state {
+				case "prep":	// same as getting "no"
+					msg := fmt.Sprintf("abort %s", req)
+					l.Print(msg)
+					state = "listening"
+					*cp <- msg
+					srvc <- ("SORRY" + "\n")
+				case "listening":
+					// noop
+				default:
+					log.Panic("unsupported timeout in coordinator")
+				}
+			} else {
+				switch state {
+				case "uncertain":
+					*cp <- "peek"	// ask what the value is
+				default:
+					log.Panic("unsupported timeout in cohort")
+				}
+			}
 		// messages sent from coordinator:
+		case "value":
+			switch state {
+			case "uncertain":
+				val := strings.Join(f[1:], " ")
+				l.Print("commit " + val)
+				state = "listening"
+				*cp <- "ack"
+			default:
+				log.Fatal("cohort wasn't uncertain")
+			}
 		case "prepare":
 			switch state {
 			case "listening":
@@ -254,7 +307,7 @@ func main() {
 			}
 		// messages that are not part of 2PC but are handy
 		case "peek":
-			*cp <- (value + "\n")
+			*cp <- ("value " + value)
 		case "quit":
 			log.Fatal("quitting by remote request")
 		}
