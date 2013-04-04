@@ -205,16 +205,39 @@ func main() {
 	l.Printf("%s process in state(%s) with value(%s)", prefix, state, value)
 	srvc := make(chan string)
 	dialc := make(chan string)
+	remote := coordAddr
+	local := cohortAddr
 	if doCoordinate {
-		go serve(srvc, coordAddr)
-		log.Print("started server on ", coordAddr)
-		go dial(dialc, cohortAddr)
-		log.Print("started dialer to ", cohortAddr)
-	} else {
-		go serve(srvc, cohortAddr)
-		log.Print("started server on ", cohortAddr)
+		remote = cohortAddr
+		local = coordAddr
 	}
+	go serve(srvc, local)
+	log.Print("started server on ", local)
+	go dial(dialc, remote)
+	log.Print("started dialer to ", remote)
 	req := "(no request)"
+
+	if state == "uncertain" {
+L:
+		for {
+			dialc <- "peek"
+			select {
+			case <- time.After(1*time.Second):
+			s := <- dialc
+				f := strings.Fields(s)
+				if len(f) < 1 || f[0] != "value" {
+					log.Fatal("bad response to peek")
+				}
+				value = ""
+				if len(f) > 1 {
+					value = strings.Join(f[1:], " ")
+				}
+				l.Printf("commit %s", value)
+				state = "listening"
+				break L
+			}
+		}
+	}
 
 	// the coordinator gets different messages than the cohort
 	for {
@@ -302,7 +325,7 @@ func main() {
 			} else {
 				switch state {
 				case "uncertain":
-					*cp <- "peek"	// ask what the value is
+					dialc <- "peek"	// ask what the value is
 				default:
 					log.Panic("unsupported timeout in cohort")
 				}
