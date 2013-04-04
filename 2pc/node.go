@@ -46,11 +46,21 @@ func serve(c chan string, myAddr string) {
 		c <- s
 		rsp := <- c
 		log.Printf("serve: responding to %s with %s", raddr, rsp)
-		_, err = conn.WriteToUDP([]byte(rsp), raddr)
-		if err != nil {
-			log.Panic(err)
+		if (!drop()) {
+			_, err = conn.WriteToUDP([]byte(rsp), raddr)
+			if err != nil {
+				log.Panic(err)
+			}
 		}
 	}
+}
+
+func drop() bool {
+	d := rand.Float64() <= dropRatio
+	if (d) {
+		log.Print("packet drop!")
+	}
+	return d
 }
 
 func dial(stateMach chan string, theirAddr string) {
@@ -63,9 +73,11 @@ func dial(stateMach chan string, theirAddr string) {
 	for {
 		msg := <- stateMach
 		log.Printf("dial: sending \"%s\" to %s", msg, theirAddr)
-		_, err := conn.(*net.UDPConn).Write([]byte(msg))
-		if err != nil {
-			log.Panic(err)
+		if (!drop()) {
+			_, err := conn.(*net.UDPConn).Write([]byte(msg))
+			if err != nil {
+				log.Panic(err)
+			}
 		}
 		n, raddr, err := conn.(*net.UDPConn).ReadFromUDP(buf)
 		if err != nil {
@@ -99,10 +111,13 @@ const coordAddr = "127.0.0.1:9898"
 const cohortAddr = "127.0.0.1:9999"
 var doCoordinate bool
 var value = "(unset value)"
+var dropRatio float64
 
 func init() {
 	flag.BoolVar(&doCoordinate, "c", false,
 		"whether to be the coordinator")
+	flag.Float64Var(&dropRatio, "d", 0.05,
+		"dropped/total ratio for sent UDP packets")
 }
 func main() {
 	flag.Parse()
@@ -157,7 +172,7 @@ func main() {
 			switch state {
 			case "prep":
 				final := "commit"
-				if rand.Intn(10) > 6 {
+				if rand.Intn(10) > 8 {
 					final = "abort"
 				}
 				msg := fmt.Sprintf("%s %s", final, req)
@@ -200,7 +215,7 @@ func main() {
 			switch state {
 			case "listening":
 				agree := "yes"
-				if rand.Intn(10) > 6 {
+				if rand.Intn(10) > 8 {
 					agree = "no"
 				}
 				msg := agree
