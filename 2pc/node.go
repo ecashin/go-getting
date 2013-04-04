@@ -109,18 +109,67 @@ func dial(stateMach chan string, theirAddr string) {
 	}
 }
 
-func startLog() *log.Logger {
+// returns the log, the value, and whether the value is uncertain
+func startLog() (*log.Logger, string, bool) {
 	logd := fmt.Sprintf("%s/tmp/node.go", os.Getenv("HOME"))
-	logf := fmt.Sprintf("log-%d", os.Getpid())
+	logf := "cohort.log"
+	if doCoordinate {
+		logf = "coordinator.log"
+	}
 	if err := os.MkdirAll(logd, 0755); err != nil {
 		log.Panic(err)
 	}
-	outlog, err := os.OpenFile(fmt.Sprintf("%s/%s", logd, logf),
-		os.O_WRONLY|os.O_CREATE, 0644)
+	l, err := os.OpenFile(fmt.Sprintf("%s/%s", logd, logf),
+		os.O_SYNC|os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		log.Panic(err)
 	}
-	return log.New(outlog, "", log.LstdFlags|log.Lmicroseconds)
+	bufsiz := 9000
+	buf := make([]byte, bufsiz)
+	n, err := l.Seek(0, os.SEEK_END)
+	if err != nil {
+		log.Panic(err)
+	}
+	if n > int64(bufsiz) {
+		n = int64(bufsiz)
+	}
+	_, err = l.Seek(-int64(n), os.SEEK_END)
+	if err != nil {
+		log.Panic(err)
+	}
+	m := 0
+	if n > 0 {
+		m, err = l.Read(buf)
+		if err != nil {
+			log.Panic(err)
+		}
+	}
+	value := "(unset value)"
+	uncertain := false
+	if m > 0 {
+		lines := strings.FieldsFunc(string(buf[:m]), func (c rune) bool {
+			return c == '\n'
+		})
+		for _, i := range lines {
+			log.Print(logf+": "+i)
+			f := strings.Fields(i)
+			if len(f) > 2 {
+				v := ""
+				if len(f) > 3 {				
+					v = strings.Join(f[3:], " ")
+				}
+				switch f[2] {
+				case "commit":
+					uncertain = false
+					value = v
+				case "yes":
+					uncertain = true
+					value = v
+				}
+			}
+		}
+	}
+	return log.New(l, "", log.LstdFlags|log.Lmicroseconds), value, uncertain
 }
 
 func pause() {
@@ -130,7 +179,6 @@ func pause() {
 const coordAddr = "127.0.0.1:9898"
 const cohortAddr = "127.0.0.1:9999"
 var doCoordinate bool
-var value = "(unset value)"
 var dropRatio float64
 
 func init() {
@@ -144,9 +192,17 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	// this is the two-phase commit log on stable storage
-	l := startLog()
-	l.Print("starting log")
-
+	l, value, uncertain := startLog()
+	state := "listening"
+	prefix := "START"
+	if uncertain {
+		if doCoordinate {
+			log.Fatal("uncertain coordinator")
+		}
+		prefix += " UNCERTAIN"
+		state = "uncertain"
+	}
+	l.Printf("%s process in state(%s) with value(%s)", prefix, state, value)
 	srvc := make(chan string)
 	dialc := make(chan string)
 	if doCoordinate {
@@ -158,8 +214,6 @@ func main() {
 		go serve(srvc, cohortAddr)
 		log.Print("started server on ", cohortAddr)
 	}
-
-	state := "listening"
 	req := "(no request)"
 
 	// the coordinator gets different messages than the cohort
@@ -257,8 +311,8 @@ func main() {
 		case "value":
 			switch state {
 			case "uncertain":
-				val := strings.Join(f[1:], " ")
-				l.Print("commit " + val)
+				value = strings.Join(f[1:], " ")
+				l.Print("commit " + value)
 				state = "listening"
 				*cp <- "ack"
 			default:
@@ -272,6 +326,11 @@ func main() {
 					agree = "no"
 				}
 				msg := agree
+				req = ""
+				if len(f) > 1 {
+					req = strings.Join(f[1:], " ")
+					msg += " " + req
+				}
 				l.Print(msg)
 				if agree == "yes" {
 					state = "uncertain"
