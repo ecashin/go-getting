@@ -14,6 +14,12 @@
 // By default, there will be some simulated drops of packets.
 // You can use the "-d" option to specify a ratio of drops to
 // total packets.
+//
+// If you start an uncertain cohort that cannot communicate
+// with the coordinator when it tries to get the current value,
+// the cohort panics.  That's fine, because it can't get out
+// of uncertainty until it can reach the coordinator and get
+// the value.  So start the cohort again.
 
 package main
 
