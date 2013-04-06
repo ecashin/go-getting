@@ -39,8 +39,8 @@ G P promise Q V
        acceptor promises not to accept proposal
        with number less than P in game G, telling
        proposer that value V has already been accepted
-       for proposal number Q in game G.  A nil V means
-       no value has been accepted yet.
+       for proposal number Q in game G.  If Q and
+       V are absent, no value has been accepted yet.
 `
 
 var server *string = flag.String("server", "irc.freenode.net", "IRC server address")
@@ -181,6 +181,11 @@ func (pm *PMod) isInvalidPromise(f []string) bool {
 	if _, err := strconv.ParseInt(f[0], 0, 64); err != nil {
 		return true
 	}
+	if len(f) > 3 {
+		if _, err := strconv.ParseInt(f[3], 0, 64); err != nil {
+			return true
+		}
+	}
 	return false
 }
 
@@ -296,7 +301,7 @@ func (pm *PMod) handleMsg(send func(string), nick, msg string) {
 			pl.min = p
 		}
 		// XXXtodo: 
-		//   check that this implementation of promise is complete
+		//   record promised values
 	case "set":
 		q, accepted, why := pm.quorumPromised(nick, p)
 		if !q {
