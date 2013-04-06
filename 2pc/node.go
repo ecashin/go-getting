@@ -1,15 +1,39 @@
-// node.go - two-phase commit demo
-// There's the coordinator and the cohort.
-// This is a presume-abort variant of the 2PC. (Lampson and Lomet 1993)
+// node.go - two-phase commit demo with two participants
+//
+// This is a presume-abort variant of the 2PC. (Lampson and
+// Lomet, 1993).  A 2PC protocol allows distributed state to
+// change in a way that appears atomic to outside observers.
+//
+// The two participants are the coordinator and the cohort.
+// It is worth noting that the cohort has a "period of 
+// uncertainty" where it becomes dependent on the coordinator
+// to make further progress---It can't exhibit any externally
+// visible behavior until the coordinator tells it what the
+// new state is.  You can see, for example, that the cohort
+// will "peek" at the state from the coordinator when it sees
+// in its log that it said "yes" before last terminating.
 //
 // The coordinator listens for requests from clients, and it
 // dials the (sole, for now) cohort.  The cohort listens for
-// messages from the coordinator.
+// messages from the coordinator.  The demo uses UDP over the
+// loopback network device.
 //
 // Example usage with three processes on term1, term2, term3:
 // term1$ go run node.go -c	# run the coordinator
 // term2$ go run node.go	# run the cohort
 // term3$ nc -u localhost 9898	# interact with coordinator
+//
+// Interacting:
+//   Playing the part of the client, type in "req beans\r"
+//   (in term3's netcat session in the example above).  That
+//   will make the coordinator begin the protocol to try to
+//   atomically change the state from its current value to
+//   "beans".
+//
+//   The response is "OK" if it succeeds or "SORRY" if no
+//   state change was made.  You get "SORRY" if a simulated
+//   failure occured or one of the participants aborted the
+//   state change.
 //
 // By default, there will be some simulated drops of packets.
 // You can use the "-d" option to specify a ratio of drops to
@@ -24,10 +48,8 @@
 package main
 
 import (
-//	"bytes"
 	"flag"
 	"fmt"
-//	"io"
 	"log"
 	"math/rand"
 	"net"
