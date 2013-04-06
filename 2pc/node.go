@@ -251,7 +251,7 @@ L:
 			dialc <- "peek"
 			select {
 			case <- time.After(1*time.Second):
-			s := <- dialc
+			case s := <- dialc:
 				f := strings.Fields(s)
 				if len(f) < 1 || f[0] != "value" {
 					log.Fatal("bad response to peek")
