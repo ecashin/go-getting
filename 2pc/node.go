@@ -44,6 +44,20 @@
 // the cohort panics.  That's fine, because it can't get out
 // of uncertainty until it can reach the coordinator and get
 // the value.  So start the cohort again.
+//
+// In general, the consistency is being demonstrated but not
+// availability (see Brewer at link below).  For example, if
+// the "commit" message from the coordinator is lost, then
+// the cohort stays uncertain, the coordinator times out waiting
+// for the ack, the cohort panics when a subsequent "prepare"
+// message is received but it is still expecting "commit" or
+// "abort", and then the coordinator panics because the UDP
+// write fails.  That's an availability problem, but not a
+// consistency problem, as the participants will still have
+// the right state in their logs, and the cohort will ask the
+// coordinator what to do on start up.
+//
+// http://www.infoq.com/articles/cap-twelve-years-later-how-the-rules-have-changed
 
 package main
 
