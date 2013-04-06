@@ -5,7 +5,7 @@
 // change in a way that appears atomic to outside observers.
 //
 // The two participants are the coordinator and the cohort.
-// It is worth noting that the cohort has a "period of 
+// It is worth noting that the cohort has a "period of
 // uncertainty" where it becomes dependent on the coordinator
 // to make further progress---It can't exhibit any externally
 // visible behavior until the coordinator tells it what the
@@ -93,9 +93,9 @@ func serve(c chan string, myAddr string) {
 		}
 		log.Printf("serve: %s says %s; sending to state machine", raddr, s)
 		c <- s
-		rsp := <- c
+		rsp := <-c
 		log.Printf("serve: responding to %s with %s", raddr, rsp)
-		if (!drop()) {
+		if !drop() {
 			_, err = conn.WriteToUDP([]byte(rsp), raddr)
 			if err != nil {
 				log.Panic(err)
@@ -106,7 +106,7 @@ func serve(c chan string, myAddr string) {
 
 func drop() bool {
 	d := rand.Float64() <= dropRatio
-	if (d) {
+	if d {
 		log.Print("packet DROP!")
 	}
 	return d
@@ -121,9 +121,9 @@ func dial(stateMach chan string, theirAddr string) {
 	buf := make([]byte, 9999)
 	udp := make(chan string)
 	for {
-		msg := <- stateMach
+		msg := <-stateMach
 		log.Printf("dial: sending \"%s\" to %s", msg, theirAddr)
-		if (!drop()) {
+		if !drop() {
 			_, err := conn.(*net.UDPConn).Write([]byte(msg))
 			if err != nil {
 				log.Panic(err)
@@ -138,13 +138,13 @@ func dial(stateMach chan string, theirAddr string) {
 				log.Panic(err)
 			}
 			udp <- string(buf[:n])
-		} ()
+		}()
 		var s string
 		select {
-		case <- time.After(2*time.Second):
+		case <-time.After(2 * time.Second):
 			s = "timeout"
 			log.Print("dial: TIMEOUT reading from UDP")
-		case s = <- udp:
+		case s = <-udp:
 			log.Printf("dial: %s says %s; sending to state machine", raddr, s)
 		}
 		stateMach <- s
@@ -189,15 +189,15 @@ func startLog() (*log.Logger, string, bool) {
 	value := "(unset value)"
 	uncertain := false
 	if m > 0 {
-		lines := strings.FieldsFunc(string(buf[:m]), func (c rune) bool {
+		lines := strings.FieldsFunc(string(buf[:m]), func(c rune) bool {
 			return c == '\n'
 		})
 		for _, i := range lines {
-			log.Print(logf+": "+i)
+			log.Print(logf + ": " + i)
 			f := strings.Fields(i)
 			if len(f) > 2 {
 				v := ""
-				if len(f) > 3 {				
+				if len(f) > 3 {
 					v = strings.Join(f[3:], " ")
 				}
 				switch f[2] {
@@ -220,6 +220,7 @@ func pause() {
 
 const coordAddr = "127.0.0.1:9898"
 const cohortAddr = "127.0.0.1:9999"
+
 var doCoordinate bool
 var dropRatio float64
 
@@ -260,12 +261,12 @@ func main() {
 	req := "(no request)"
 
 	if state == "uncertain" {
-L:
+	L:
 		for {
 			dialc <- "peek"
 			select {
-			case <- time.After(1*time.Second):
-			case s := <- dialc:
+			case <-time.After(1 * time.Second):
+			case s := <-dialc:
 				f := strings.Fields(s)
 				if len(f) < 1 || f[0] != "value" {
 					log.Fatal("bad response to peek")
@@ -353,7 +354,7 @@ L:
 		case "timeout":
 			if doCoordinate {
 				switch state {
-				case "prep":	// same as getting "no"
+				case "prep": // same as getting "no"
 					msg := fmt.Sprintf("abort %s", req)
 					l.Print(msg)
 					state = "listening"
@@ -367,7 +368,7 @@ L:
 			} else {
 				switch state {
 				case "uncertain":
-					dialc <- "peek"	// ask what the value is
+					dialc <- "peek" // ask what the value is
 				default:
 					log.Panic("unsupported timeout in cohort")
 				}
