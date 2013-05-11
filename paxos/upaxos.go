@@ -3,6 +3,9 @@
 //	The peers are expected to be supplied line-by-line
 //	on standard input, in the form: a.b.c.d:p, an IP
 //	address a.b.c.d and port p.
+//
+// example usage:
+// ecashin@atala paxos$ go run upaxos.go < upaxos-peers.txt
 
 package main
 
@@ -15,6 +18,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 var myAddr string
@@ -53,7 +57,13 @@ func group() []string {
 	return g
 }
 
-func serve(c chan string) {
+type Msg struct {
+	s string
+	conn *net.UDPConn
+	raddr *net.UDPAddr
+}
+
+func serve(c chan Msg) {
 	la, err := net.ResolveUDPAddr("udp4", myAddr)
 	if err != nil {
 		log.Panic(err)
@@ -72,13 +82,19 @@ func serve(c chan string) {
 		if len(strings.Fields(s)) == 0 {
 			continue
 		}
-		c <- s
-		rsp := <-c
-		_, err = conn.WriteToUDP([]byte(rsp), raddr)
-		if err != nil {
-			log.Panic(err)
-		}
+		c <- Msg{s, conn, raddr}
 	}
+}
+
+func send(s string, conn *net.UDPConn, raddr *net.UDPAddr) {
+	_, err := conn.WriteToUDP([]byte(s), raddr)
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
+func stateMach(m Msg) {
+	send(fmt.Sprintf(">%s<\n", strings.TrimSpace(m.s)), m.conn, m.raddr)
 }
 
 func init() {
@@ -94,11 +110,18 @@ func main() {
 	for i := 0; i < len(g); i++ {
 		log.Print(g[i])
 	}
-	sc := make(chan string)
+	sc := make(chan Msg)
 	go serve(sc)
+	i := 0
 	for {
-		m := <- sc
-		log.Print(m)
-		sc <- fmt.Sprintf(">%s<\n", strings.TrimSpace(m))
+		select {
+		case m := <- sc:
+			log.Print(m.s, m.raddr)
+			stateMach(m)
+		case <- time.After(1 * time.Second):
+			log.Print("timeout at iteration ", i)
+			t = time.After(time.Second)
+		}
+		i++
 	}
 }
