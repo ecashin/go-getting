@@ -23,7 +23,13 @@
 //   	       sends from-acceptor messages
 //
 // Each of the latter two has its own state machine.
-
+//
+// The problem with this design is that there's an interplay
+// between leading and accepting.  For example, if I see a
+// new request but expect a peer to take the lead, I should
+// timeout and take the lead myself (delayed according to my
+// ID, to avoid racing with other peers), if I don't see any
+// "propose" message.
 package main
 
 import (
@@ -40,6 +46,7 @@ import (
 
 var myAddr string
 var myID int = -1
+var maxProposal int64 = -1	// max proposal seen so far
 
 func group() []string {
 	grp := list.New()
