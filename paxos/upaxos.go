@@ -6,6 +6,23 @@
 //
 // example usage:
 // ecashin@atala paxos$ go run upaxos.go < upaxos-peers.txt
+//
+// ecashin@atala ~$ echo accept this | nc -u 127.0.0.1 9876
+//
+// DESIGN
+//
+// The main thread handles startup and message multiplexing for
+// cooperating goroutines:
+//
+//   listener: receives messages
+//
+//   leader:   handles to-leader messages
+//   	       sends from-leader messages
+//
+//   acceptor: handles to-acceptor messages
+//   	       sends from-acceptor messages
+//
+// Each of the latter two has its own state machine.
 
 package main
 
@@ -63,7 +80,7 @@ type Msg struct {
 	raddr *net.UDPAddr
 }
 
-func serve(c chan Msg) {
+func serve(c chan<- Msg) {
 	la, err := net.ResolveUDPAddr("udp4", myAddr)
 	if err != nil {
 		log.Panic(err)
@@ -93,8 +110,20 @@ func send(s string, conn *net.UDPConn, raddr *net.UDPAddr) {
 	}
 }
 
-func stateMach(m Msg) {
-	send(fmt.Sprintf(">%s<\n", strings.TrimSpace(m.s)), m.conn, m.raddr)
+func lead(mc <-chan Msg) {
+	for {
+		m := <- mc
+		log.Print("leader sees ", m.s)
+		send("OK from leader\n", m.conn, m.raddr)
+	}
+}
+
+func accept(mc <-chan Msg) {
+	for {
+		m := <- mc
+		log.Print("acceptor sees ", m.s)
+		send("OK from acceptor\n", m.conn, m.raddr)
+	}
 }
 
 func init() {
@@ -111,16 +140,30 @@ func main() {
 		log.Print(g[i])
 	}
 	sc := make(chan Msg)
+	lc := make(chan Msg)
+	ac := make(chan Msg)
 	go serve(sc)
+	go lead(lc)
+	go accept(lc)
 	i := 0
 	for {
 		select {
 		case m := <- sc:
 			log.Print(m.s, m.raddr)
-			stateMach(m)
-		case <- time.After(1 * time.Second):
+			flds := strings.Fields(m.s)
+			if len(flds) != 0 {
+				switch flds[0] {
+				case "request": fallthrough
+				case "accept": fallthrough
+				case "promise":
+					lc <- m
+				case "propose": fallthrough
+				case "set":
+					ac <- m
+				}
+			}
+		case <- time.After(1000 * time.Second):
 			log.Print("timeout at iteration ", i)
-			t = time.After(time.Second)
 		}
 		i++
 	}
