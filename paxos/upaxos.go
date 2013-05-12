@@ -11,10 +11,11 @@
 //
 // DESIGN
 //
-// The main thread handles startup and message multiplexing for
-// cooperating goroutines:
+// The main thread handles starts a goroutine:
 //
 //   listener: receives messages
+//
+// ... and runs a state machine instantiating the ...
 //
 //   leader:   handles to-leader messages
 //   	       sends from-leader messages
@@ -22,14 +23,12 @@
 //   acceptor: handles to-acceptor messages
 //   	       sends from-acceptor messages
 //
-// Each of the latter two has its own state machine.
-//
-// The problem with this design is that there's an interplay
-// between leading and accepting.  For example, if I see a
-// new request but expect a peer to take the lead, I should
-// timeout and take the lead myself (delayed according to my
-// ID, to avoid racing with other peers), if I don't see any
-// "propose" message.
+// There's an interplay between leading and accepting.  For example,
+// if I see a new request but expect a peer to take the lead, I should
+// timeout and take the lead myself (delayed according to my ID, to
+// avoid racing with other peers), if I don't see any "propose"
+// message.  So the state machine design is attractive.
+
 package main
 
 import (
@@ -46,7 +45,7 @@ import (
 
 var myAddr string
 var myID int = -1
-var maxProposal int64 = -1	// max proposal seen so far
+var biggest int64 = -1	// largest proposal number seen so far
 
 func group() []string {
 	grp := list.New()
@@ -117,22 +116,6 @@ func send(s string, conn *net.UDPConn, raddr *net.UDPAddr) {
 	}
 }
 
-func lead(mc <-chan Msg) {
-	for {
-		m := <- mc
-		log.Print("leader sees ", m.s)
-		send("OK from leader\n", m.conn, m.raddr)
-	}
-}
-
-func accept(mc <-chan Msg) {
-	for {
-		m := <- mc
-		log.Print("acceptor sees ", m.s)
-		send("OK from acceptor\n", m.conn, m.raddr)
-	}
-}
-
 func init() {
 	flag.StringVar(&myAddr, "a", "127.0.0.1:9876",
 		"IP and port for this process")
@@ -146,16 +129,12 @@ func main() {
 	for i := 0; i < len(g); i++ {
 		log.Print(g[i])
 	}
-	sc := make(chan Msg)
-	lc := make(chan Msg)
-	ac := make(chan Msg)
-	go serve(sc)
-	go lead(lc)
-	go accept(lc)
+	lc := make(chan Msg)	// listener channel
+	go serve(lc)
 	i := 0
 	for {
 		select {
-		case m := <- sc:
+		case m := <- lc:
 			log.Print(m.s, m.raddr)
 			flds := strings.Fields(m.s)
 			if len(flds) != 0 {
@@ -163,10 +142,10 @@ func main() {
 				case "request": fallthrough
 				case "accept": fallthrough
 				case "promise":
-					lc <- m
+					log.Print("leader stuff")
 				case "propose": fallthrough
 				case "set":
-					ac <- m
+					log.Print("acceptor stuff")
 				}
 			}
 		case <- time.After(1000 * time.Second):
