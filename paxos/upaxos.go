@@ -52,12 +52,11 @@ import (
 	"net"
 	"os"
 	"strings"
-	"time"
+	// "time" for timeouts later
 )
 
 var myAddr string
 var myID int = -1
-var biggest int64 = -1	// largest proposal number seen so far
 
 func group() []string {
 	grp := list.New()
@@ -98,7 +97,23 @@ type Msg struct {
 	raddr *net.UDPAddr
 }
 
-func serve(c chan<- Msg) {
+func lead(c chan Msg) {
+	for m := range c {
+		log.Printf("leader got \"%s\"", m.s)
+	}
+}
+func accept(c chan Msg) {
+	for m := range c {
+		log.Printf("acceptor got \"%s\"", m.s)
+	}
+}
+func learn(c chan Msg) {
+	for m := range c {
+		log.Printf("learner got \"%s\"", m.s)
+	}
+}
+
+func listen(chans []chan Msg) {
 	la, err := net.ResolveUDPAddr("udp4", myAddr)
 	if err != nil {
 		log.Panic(err)
@@ -117,7 +132,9 @@ func serve(c chan<- Msg) {
 		if len(strings.Fields(s)) == 0 {
 			continue
 		}
-		c <- Msg{s, conn, raddr}
+		for _, c := range chans {
+			c <- Msg{s, conn, raddr}
+		}
 	}
 }
 
@@ -141,28 +158,25 @@ func main() {
 	for i := 0; i < len(g); i++ {
 		log.Print(g[i])
 	}
-	lc := make(chan Msg)	// listener channel
-	go serve(lc)
-	i := 0
-	for {
-		select {
-		case m := <- lc:
-			log.Print(m.s, m.raddr)
-			flds := strings.Fields(m.s)
-			if len(flds) != 0 {
-				switch flds[0] {
-				case "request": fallthrough
-				case "accept": fallthrough
-				case "promise":
-					log.Print("leader stuff")
-				case "propose": fallthrough
-				case "set":
-					log.Print("acceptor stuff")
-				}
+	leadc := make(chan Msg)
+	acceptc := make(chan Msg)
+	learnc := make(chan Msg)
+	mainc := make(chan Msg)
+	go lead(leadc)
+	go accept(acceptc)
+	go learn(learnc)
+	go listen([]chan Msg{leadc, acceptc, learnc, mainc})
+loop:
+	for m := range mainc {
+		flds := strings.Fields(m.s)
+		if len(flds) > 0 {
+			switch flds[0] {
+			case "quit": fallthrough
+			case "exit": fallthrough
+			case "bye":
+				log.Print("exiting")
+				break loop
 			}
-		case <- time.After(1000 * time.Second):
-			log.Print("timeout at iteration ", i)
 		}
-		i++
 	}
 }
