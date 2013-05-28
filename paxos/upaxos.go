@@ -15,19 +15,31 @@
 //
 //   listener: receives messages
 //
-// ... and runs a state machine instantiating the ...
+// ... which copies each message into multiple channels, one
+// for each role that acts on received messages.  Goroutines
+// for each such role ignore or act on the messages as appropriate.
 //
-//   leader:   handles to-leader messages
-//   	       sends from-leader messages
+//   leader:   handles Request, NACK, Promise, Accept;
+//   	       sends Propose, Assign, Response
 //
-//   acceptor: handles to-acceptor messages
-//   	       sends from-acceptor messages
+//   acceptor: handles Propose, Assign;
+//   	       sends NACK, Promise, Accept
+//
+//   learner:  notes observed quorums;
+//             can respond to requests about previous 
+//             paxos instances (history)
 //
 // There's an interplay between leading and accepting.  For example,
 // if I see a new request but expect a peer to take the lead, I should
 // timeout and take the lead myself (delayed according to my ID, to
 // avoid racing with other peers), if I don't see any "propose"
 // message.  So the state machine design is attractive.
+//
+// However, a pure state machine design is awkward because the real
+// state of the program is an N-tuple for the N concurrently running
+// roles, and the combinations mean there are very many states.
+//
+// Using goroutines should result in more understandable code.
 
 package main
 
