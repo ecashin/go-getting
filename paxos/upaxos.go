@@ -51,8 +51,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
-	// "time" for timeouts later
+	"time"
 )
 
 var myAddr string
@@ -97,9 +98,74 @@ type Msg struct {
 	raddr *net.UDPAddr
 }
 
-func lead(c chan Msg) {
-	for m := range c {
-		log.Printf("leader got \"%s\"", m.s)
+type Req struct {
+	proposed bool
+	accepts map[string]bool
+	val string
+}
+func req(f []string) Req {
+	if len(f) != 2 || f[0] != "Request" {
+		panic("called req with bad string")
+	}
+	return Req{false, make(map[string] bool), f[1]}
+}
+
+type Nack struct {
+	instance, pnum int64
+}
+func nack(f []string) Nack {
+	if len(f) != 3 || f[0] != "NACK" {
+		panic("called nack on bad string")
+	}
+	i, err := strconv.ParseInt(f[1], 0, 64)
+	if err != nil {
+		panic(err)
+	}
+	p, err := strconv.ParseInt(f[2], 0, 64)
+	if err != nil {
+		panic(err)
+	}
+	return Nack{i, p}
+}
+
+type leader struct {
+	g []string	// the group of Paxos participants
+	lastp int64
+	rq *list.List
+}
+func (ld *leader) nextp() {
+	ld.lastp += int64(len(ld.g))
+}
+func (ld *leader) propose(r Req) {
+	log.Printf("propose Req{%v, %v, %v}", r.proposed, r.accepts, r.val)
+}
+func lead(c chan Msg, g []string) {
+	ld := leader{g, int64(myID), list.New()}
+	for {
+		select {
+		case m := <- c:
+			log.Printf("leader got \"%s\"", m.s)
+			f := strings.Fields(m.s)
+			if len(f) == 0 {
+				continue
+			}
+			switch f[0] {
+			case "Request":
+				r := req(f)
+				ld.rq.PushBack(r)
+				r = ld.rq.Front().Value.(Req)
+				if !r.proposed {
+					ld.propose(r)
+				}
+			case "NACK":
+				nk := nack(f)
+				log.Print(nk.instance)
+			}
+		case <- time.After(50 * time.Millisecond):
+			if ld.rq.Front() != nil {
+				log.Print("service request")
+			}
+		}
 	}
 }
 func accept(c chan Msg) {
@@ -107,7 +173,7 @@ func accept(c chan Msg) {
 		log.Printf("acceptor got \"%s\"", m.s)
 	}
 }
-func learn(c chan Msg) {
+func learn(c chan Msg, nGrp int) {
 	for m := range c {
 		log.Printf("learner got \"%s\"", m.s)
 	}
@@ -162,9 +228,9 @@ func main() {
 	acceptc := make(chan Msg)
 	learnc := make(chan Msg)
 	mainc := make(chan Msg)
-	go lead(leadc)
+	go lead(leadc, g)
 	go accept(acceptc)
-	go learn(learnc)
+	go learn(learnc, len(g))
 	go listen([]chan Msg{leadc, acceptc, learnc, mainc})
 loop:
 	for m := range mainc {
