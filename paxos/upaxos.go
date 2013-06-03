@@ -98,16 +98,18 @@ type Msg struct {
 	raddr *net.UDPAddr
 }
 
+func mustStrtoll(s string) (n int64) {
+	n, err := strconv.ParseInt(s, 0, 64)
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
 // unlike wikipedia, it's instance first
 func instanceProposal(f []string) (p, i int64) {
-	i, err := strconv.ParseInt(f[1], 0, 64)
-	if err != nil {
-		panic(err)
-	}
-	p, err = strconv.ParseInt(f[2], 0, 64)
-	if err != nil {
-		panic(err)
-	}
+	i = mustStrtoll(f[1])
+	p = mustStrtoll(f[2])
 	return
 }
 
@@ -124,15 +126,29 @@ func newReq(f []string) Req {
 }
 
 type Promise struct {
-	proposal, instance int64
-	value string
+	// required fields
+	minp, instance int64
+
+	// optional fields, absent if no prior accepted value
+	valp int64	// proposal number associated with the accepted value
+	value *string	// the previously accepted value, nil if none accepted
 }
 func newPromise(f []string) Promise {
 	if len(f) < 3 || f[0] != "Promise" {
 		panic("called newPromise with bad string")
 	}
-	p, i := instanceProposal(f)	
-	return Promise{p, i, strings.Join(f[3:], " ")}
+	p, i := instanceProposal(f)
+	vp := int64(0)
+	var v *string
+	if len(f) > 3 {
+		vp = mustStrtoll(f[3])
+		s := ""
+		if len(f) > 4 {
+			s = strings.Join(f[4:], " ")
+		}
+		v = &s
+	}
+	return Promise{p, i, vp, v}
 }
 
 type Accept struct {
@@ -162,21 +178,21 @@ func lead(c chan Msg, g []string) {
 	instance := int64(0)
 	lastp := int64(myID)	// proposal number last sent
 	rq := list.New()	// queued requests
-	var r *Req	// client request
-	var v *string	// value to fix
-	bump := func() {
-		lastp += int64(len(g))
-	}
+//	var r *Req	// client request
+//	var v *string	// value to fix
+//	bump := func() {
+//		lastp += int64(len(g))
+//	}
 	catchup := func(p int64) int64 {
 		n := int64(len(g))
 		p /= n
 		p++
 		return p * n + int64(myID)
 	}
-	propose := func() {
-		log.Print("propose I:%d P:%d V:%s",
-			instance, lastp, r.val)
-	}
+//	propose := func() {
+//		log.Print("propose I:%d P:%d V:%s",
+//			instance, lastp, r.val)
+//	}
 	for {
 		select {
 		case m := <- c:
@@ -188,13 +204,16 @@ func lead(c chan Msg, g []string) {
 			switch f[0] {
 			case "Promise":
 				p := newPromise(f)
-				r := rq.Front().Value.(Req)
+//				r := rq.Front().Value.(Req)
 				if p.instance != instance {
 					instance = p.instance
-					lastp = catchup(p.proposal)
-				}
-				if p.proposal != lastp {
-					lastp = catchup(p.proposal)
+					lastp = catchup(p.minp)
+					log.Print("try again")
+				} else if p.minp != lastp {
+					lastp = catchup(p.minp)
+					log.Print("try again")
+				} else {
+					log.Print("send Fix message")
 				}
 			case "Accept":
 				a := newAccept(f)
