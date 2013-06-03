@@ -20,9 +20,9 @@
 // for each such role ignore or act on the messages as appropriate.
 //
 //   leader:   handles Request, NACK, Promise, Accept;
-//   	       sends Propose, Assign, Response
+//   	       sends Propose, Fix, Response
 //
-//   acceptor: handles Propose, Assign;
+//   acceptor: handles Propose, Fix;
 //   	       sends NACK, Promise, Accept
 //
 //   learner:  notes observed quorums;
@@ -98,49 +98,85 @@ type Msg struct {
 	raddr *net.UDPAddr
 }
 
+// unlike wikipedia, it's instance first
+func instanceProposal(f []string) (p, i int64) {
+	i, err := strconv.ParseInt(f[1], 0, 64)
+	if err != nil {
+		panic(err)
+	}
+	p, err = strconv.ParseInt(f[2], 0, 64)
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
 type Req struct {
 	proposed bool
 	accepts map[string]bool
 	val string
 }
-func req(f []string) Req {
+func newReq(f []string) Req {
 	if len(f) != 2 || f[0] != "Request" {
-		panic("called req with bad string")
+		panic("called newReq with bad string")
 	}
 	return Req{false, make(map[string] bool), f[1]}
+}
+
+type Promise struct {
+	proposal, instance int64
+	value string
+}
+func newPromise(f []string) Promise {
+	if len(f) < 3 || f[0] != "Promise" {
+		panic("called newPromise with bad string")
+	}
+	p, i := instanceProposal(f)	
+	return Promise{p, i, strings.Join(f[3:], " ")}
+}
+
+type Accept struct {
+	proposal, instance int64
+	value string
+}
+func newAccept(f []string) Accept {
+	if len(f) < 3 || f[0] != "Accept" {
+		panic("called newAccept with bad string")
+	}
+	p, i := instanceProposal(f)	
+	return Accept{p, i, strings.Join(f[3:], " ")}
 }
 
 type Nack struct {
 	instance, pnum int64
 }
-func nack(f []string) Nack {
+func newNack(f []string) Nack {
 	if len(f) != 3 || f[0] != "NACK" {
-		panic("called nack on bad string")
+		panic("called newNack on bad string")
 	}
-	i, err := strconv.ParseInt(f[1], 0, 64)
-	if err != nil {
-		panic(err)
-	}
-	p, err := strconv.ParseInt(f[2], 0, 64)
-	if err != nil {
-		panic(err)
-	}
+	i, p := instanceProposal(f)
 	return Nack{i, p}
 }
 
-type leader struct {
-	g []string	// the group of Paxos participants
-	lastp int64
-	rq *list.List
-}
-func (ld *leader) nextp() {
-	ld.lastp += int64(len(ld.g))
-}
-func (ld *leader) propose(r Req) {
-	log.Printf("propose Req{%v, %v, %v}", r.proposed, r.accepts, r.val)
-}
 func lead(c chan Msg, g []string) {
-	ld := leader{g, int64(myID), list.New()}
+	instance := int64(0)
+	lastp := int64(myID)	// proposal number last sent
+	rq := list.New()	// queued requests
+	var r *Req	// client request
+	var v *string	// value to fix
+	bump := func() {
+		lastp += int64(len(g))
+	}
+	catchup := func(p int64) int64 {
+		n := int64(len(g))
+		p /= n
+		p++
+		return p * n + int64(myID)
+	}
+	propose := func() {
+		log.Print("propose I:%d P:%d V:%s",
+			instance, lastp, r.val)
+	}
 	for {
 		select {
 		case m := <- c:
@@ -150,19 +186,33 @@ func lead(c chan Msg, g []string) {
 				continue
 			}
 			switch f[0] {
+			case "Promise":
+				p := newPromise(f)
+				r := rq.Front().Value.(Req)
+				if p.instance != instance {
+					instance = p.instance
+					lastp = catchup(p.proposal)
+				}
+				if p.proposal != lastp {
+					lastp = catchup(p.proposal)
+				}
+			case "Accept":
+				a := newAccept(f)
+				log.Printf("got %v", a)
 			case "Request":
-				r := req(f)
-				ld.rq.PushBack(r)
-				r = ld.rq.Front().Value.(Req)
+				r := newReq(f)
+				rq.PushBack(r)
+				r = rq.Front().Value.(Req)
 				if !r.proposed {
-					ld.propose(r)
+					log.Printf("propose Req{%v, %v, %v}",
+						r.proposed, r.accepts, r.val)
 				}
 			case "NACK":
-				nk := nack(f)
+				nk := newNack(f)
 				log.Print(nk.instance)
 			}
 		case <- time.After(50 * time.Millisecond):
-			if ld.rq.Front() != nil {
+			if rq.Front() != nil {
 				log.Print("service request")
 			}
 		}
