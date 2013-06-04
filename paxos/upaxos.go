@@ -174,11 +174,14 @@ func newNack(f []string) Nack {
 	return Nack{i, p}
 }
 
+const maxReqQ = 10	// max 10 queued requests
+
 func lead(c chan Msg, g []string) {
 	instance := int64(0)
 	lastp := int64(myID)	// proposal number last sent
 	rq := list.New()	// queued requests
-//	var r *Req	// client request
+	nrq := 0		// number of queued requests
+	var r *Req		// client request in progress
 //	var v *string	// value to fix
 //	bump := func() {
 //		lastp += int64(len(g))
@@ -219,12 +222,15 @@ func lead(c chan Msg, g []string) {
 				a := newAccept(f)
 				log.Printf("got %v", a)
 			case "Request":
-				r := newReq(f)
-				rq.PushBack(r)
-				r = rq.Front().Value.(Req)
-				if !r.proposed {
-					log.Printf("propose Req{%v, %v, %v}",
-						r.proposed, r.accepts, r.val)
+				newr := newReq(f)
+				if r == nil {
+					r = &newr
+					log.Print("send prepare")
+				} else if nrq < maxReqQ {
+					rq.PushBack(newr)
+					nrq++
+				} else {
+					log.Print("send BUSY to client")
 				}
 			case "NACK":
 				nk := newNack(f)
