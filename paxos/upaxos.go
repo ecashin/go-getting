@@ -114,15 +114,19 @@ func instanceProposal(f []string) (p, i int64) {
 }
 
 type Req struct {
-	proposed bool
-	accepts map[string]bool
-	val string
+	instance int64	// 0 for new instance
+	val string	// ignored for history query
 }
 func newReq(f []string) Req {
-	if len(f) != 2 || f[0] != "Request" {
+	if len(f) < 2 || f[0] != "Request" {
 		panic("called newReq with bad string")
 	}
-	return Req{false, make(map[string] bool), f[1]}
+	i := mustStrtoll(f[1])
+	s := ""
+	if len(f) > 2 {
+		s = strings.Join(f[2:], " ")
+	}
+	return Req{i, s}
 }
 
 type Promise struct {
@@ -248,9 +252,49 @@ func accept(c chan Msg) {
 		log.Printf("acceptor got \"%s\"", m.s)
 	}
 }
-func learn(c chan Msg, nGrp int) {
+
+type AcceptRecord struct {
+	h map[string]string	// accepted values by remote addr
+	q map[string]int	// count of hosts by value accepted
+}
+func newAcceptRecord() AcceptRecord {
+	return AcceptRecord{
+		make(map[string]string),
+		make(map[string]int),
+	}
+}
+func learn(c chan Msg, g []string) {
+	history := make(map[int64]AcceptRecord)
 	for m := range c {
-		log.Printf("learner got \"%s\"", m.s)
+		f := strings.Fields(m.s)
+		if len(f) == 0 {
+			continue
+		}
+		switch f[0] {
+		case "Accept":
+			a := newAccept(f)
+			if _, ok := history[a.instance]; !ok {
+				history[a.instance] = newAcceptRecord()
+			}
+			ar := history[a.instance]
+			oldv, wasThere := ar.h[m.raddr.String()]
+			ar.h[m.raddr.String()] = a.value
+			if wasThere {
+				ar.q[oldv] -= 1
+			}
+			ar.q[a.value] += 1
+			log.Printf("learner got \"%s\"", m.s)
+		case "Request":
+			r := newReq(f)
+			if ar, present := history[r.instance]; present {
+				for v, n := range ar.q {
+					if n > len(g)/2 {
+						log.Printf("quorum %i: %s", r.instance, v)
+					}
+				}
+			}
+			log.Print("handle any request for old instance")
+		}
 	}
 }
 
@@ -305,7 +349,7 @@ func main() {
 	mainc := make(chan Msg)
 	go lead(leadc, g)
 	go accept(acceptc)
-	go learn(learnc, len(g))
+	go learn(learnc, g)
 	go listen([]chan Msg{leadc, acceptc, learnc, mainc})
 loop:
 	for m := range mainc {
