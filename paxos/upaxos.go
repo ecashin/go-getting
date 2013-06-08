@@ -213,17 +213,19 @@ func newNack(f []string) Nack {
 
 const maxReqQ = 10	// max 10 queued requests
 
+// XXXtodo:
+//   * make sure v and vp are reset on new instance
 func lead(c chan Msg, g []string) {
 	instance := int64(0)
 	lastp := int64(myID)	// proposal number last sent
 	rq := list.New()	// queued requests
 	nrq := 0		// number of queued requests
 	var r *Req		// client request in progress
-//	var v *string	// value to fix
-//	bump := func() {
-//		lastp += int64(len(g))
-//	}
+	var v *string	// value to fix; nil means can fix client value
+	vp := int64(-1)	// proposal number associated with v
+	npromise := 0
 	catchup := func(p int64) int64 {
+		npromise = 0
 		n := int64(len(g))
 		p /= n
 		p++
@@ -243,21 +245,34 @@ func lead(c chan Msg, g []string) {
 			}
 			switch f[0] {
 			case "Promise":
+				if r == nil {
+					continue
+				}
 				p := newPromise(f)
-//				r := rq.Front().Value.(Req)
 				if p.instance != instance {
 					instance = p.instance
 					lastp = catchup(p.minp)
 					log.Print("try again")
+					continue
 				} else if p.minp != lastp {
 					lastp = catchup(p.minp)
 					log.Print("try again")
-				} else {
-					log.Print("send Fix message")
+					continue
+				}
+				if p.value != nil {
+					if p.valp > vp {
+						v = p.value
+						vp = p.valp
+					}
+				}
+				npromise++
+				if npromise > len(g)/2 {
+					log.Print("send Fix message", v)
 				}
 			case "Accept":
 				a := newAccept(f)
 				log.Printf("got %v", a)
+//				r := rq.Front().Value.(Req)
 			case "Request":
 				newr := newReq(f)
 				if r == nil {
