@@ -155,6 +155,13 @@ func newReq(f []string) Req {
 	return Req{i, s}
 }
 
+// message format:
+// Promise I A [B V]
+// where...
+// I	instance
+// A	the minimum proposal number sender promises to accept later
+// B	the proposal number associated with previously accepted value
+// V	the previously accepted value
 type Promise struct {
 	// required fields
 	minp, instance int64
