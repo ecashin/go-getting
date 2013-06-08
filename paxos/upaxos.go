@@ -1,5 +1,31 @@
 // upaxos.go - UDP-based Paxos participant implementation
 //
+// Features for short term:
+//
+//   * multiple states (AKA Multi-Paxos or "Parilament")
+//
+//   * history is fast-readable, requiring no Paxos instance
+//
+//   * Nack messages allow leaders to operate efficiently
+//
+//   * leaders back off deterministically to enhance liveness
+//
+// Features to do next:
+//
+//   * support "Join N" command, where N is the last instance
+//       learned by the candidate node.  A learner responds with
+//	 the value a quorum accepted for instance N if it's historical.
+//	 In that case, the candidate can try "Join N+1" if it learns
+//	 the value for N.
+//
+//	 Or, if there is no quorum yet for instance N, a leader
+//	 attempts to propose that the group be enlarged.  When
+//	 the candidate sees consensus on its own membership in
+//	 the group, it is up to date and fully participating.
+//
+//	 Nobody joins with an incomplete history, so the current
+//	 group can always be used to 
+//
 //	The peers are expected to be supplied line-by-line
 //	on standard input, in the form: a.b.c.d:p, an IP
 //	address a.b.c.d and port p.
