@@ -271,7 +271,7 @@ func lead(c chan Msg, g []string) {
 				}
 			case "Accept":
 				a := newAccept(f)
-				log.Printf("got %v", a)
+				log.Printf("got accept %v", a)
 //				r := rq.Front().Value.(Req)
 			case "Request":
 				newr := newReq(f)
@@ -286,7 +286,7 @@ func lead(c chan Msg, g []string) {
 				}
 			case "NACK":
 				nk := newNack(f)
-				log.Print(nk.instance)
+				log.Printf("NACK for instance: %d", nk.instance)
 			}
 		case <- time.After(50 * time.Millisecond):
 			if rq.Front() != nil {
@@ -298,6 +298,16 @@ func lead(c chan Msg, g []string) {
 func accept(c chan Msg) {
 	for m := range c {
 		log.Printf("acceptor got \"%s\"", m.s)
+		f := strings.Fields(m.s)
+		if len(f) == 0 {
+			continue
+		}
+		switch f[0] {
+		case "Propose":
+			log.Print("received propose")
+		case "Fix":
+			log.Print("received fix")
+		}
 	}
 }
 
