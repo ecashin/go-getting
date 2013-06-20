@@ -6,11 +6,15 @@
 //
 //   * history is fast-readable, requiring no Paxos instance
 //
-//   * Nack messages allow leaders to operate efficiently
+//   * NACK messages allow leaders to operate efficiently
 //
 //   * leaders back off deterministically to enhance liveness
 //
 // Features to do next:
+//
+//   * persistent storage needed for recovery ("logs")
+//
+//   * recovery - participant starts up, reads logs, and participates
 //
 //   * support "Join N" command, where N is the last instance
 //       learned by the candidate node.  A learner responds with
@@ -156,6 +160,21 @@ func newReq(f []string) Req {
 }
 
 // message format:
+// Propose I P
+// I	instance
+// P	the proposal number the leader is attempting to use
+type Propose struct {
+	instance, p int64
+}
+func newPropose(f []string) Propose {
+	if len(f) < 3 || f[0] != "Propose" {
+		log.Panic("called newPropose with bad string")
+	}
+	p, i := instanceProposal(f)
+	return Propose{i, p}
+}
+
+// message format:
 // Promise I A [B V]
 // where...
 // I	instance
@@ -172,7 +191,7 @@ type Promise struct {
 }
 func newPromise(f []string) Promise {
 	if len(f) < 3 || f[0] != "Promise" {
-		panic("called newPromise with bad string")
+		log.Panic("called newPromise with bad string")
 	}
 	p, i := instanceProposal(f)
 	vp := int64(0)
@@ -306,6 +325,8 @@ func lead(c chan Msg, g []string) {
 	}
 }
 func accept(c chan Msg) {
+	// per-instance record of minimum proposal number we can accept
+	minp := make(map[int64]int64)
 	for m := range c {
 		log.Printf("acceptor got \"%s\"", m.s)
 		f := strings.Fields(m.s)
@@ -314,7 +335,16 @@ func accept(c chan Msg) {
 		}
 		switch f[0] {
 		case "Propose":
-			log.Print("received propose")
+			p := newPropose(f)
+			min, present := minp[p.instance]
+			s := ""
+			if !present {
+				minp[p.instance] = p.p
+				s = fmt.Sprintf("Promise %d %d", instance, p.p)
+			} else if p.p < minp {
+				s := fmt.Sprintf("NACK %d %d", instance, minp)
+			}
+			m.conn.Write([]byte(s))
 		case "Fix":
 			log.Print("received fix")
 		}
@@ -333,6 +363,7 @@ func newAcceptRecord() AcceptRecord {
 }
 func learn(c chan Msg, g []string) {
 	history := make(map[int64]AcceptRecord)
+	biggesti := -1	// biggest instance number seen so far
 	for m := range c {
 		f := strings.Fields(m.s)
 		if len(f) == 0 {
@@ -357,11 +388,12 @@ func learn(c chan Msg, g []string) {
 			if ar, present := history[r.instance]; present {
 				for v, n := range ar.q {
 					if n > len(g)/2 {
-						log.Printf("quorum %i: %s", r.instance, v)
+						s := fmt.Sprintf("quorum %i: %s",
+							r.instance, v)
+						m.conn.Write([]byte(s))
 					}
 				}
 			}
-			log.Print("learner handles request for old instance here")
 		}
 	}
 }
@@ -392,6 +424,7 @@ func listen(chans []chan Msg) {
 }
 
 func send(s string, conn *net.UDPConn, ra string) { //raddr *net.UDPAddr) {
+	log.Printf("sending to %s: %s", ra, s)
 	raddr, err := net.ResolveUDPAddr("udp", ra)
 	if err != nil {
 		log.Panic(err)
