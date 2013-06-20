@@ -231,10 +231,20 @@ func lead(c chan Msg, g []string) {
 		p++
 		return p * n + int64(myID)
 	}
-//	propose := func() {
-//		log.Print("propose I:%d P:%d V:%s",
-//			instance, lastp, r.val)
-//	}
+
+	everybody := make([]string, len(g)+1)
+	for i, _ := range g {
+		everybody[i] = g[i]
+	}
+	everybody[len(g)] = myAddr
+
+	propose := func() {
+		s := fmt.Sprintf("propose I:%d P:%d V:%s",
+			instance, lastp, r.val)
+		for _, ra := range everybody {
+			send(s, nil, ra)
+		}
+	}
 	for {
 		select {
 		case m := <- c:
@@ -277,7 +287,7 @@ func lead(c chan Msg, g []string) {
 				newr := newReq(f)
 				if r == nil {
 					r = &newr
-					log.Print("send prepare")
+					propose()
 				} else if nrq < maxReqQ {
 					rq.PushBack(newr)
 					nrq++
@@ -351,7 +361,7 @@ func learn(c chan Msg, g []string) {
 					}
 				}
 			}
-			log.Print("handle any request for old instance")
+			log.Print("learner handles request for old instance here")
 		}
 	}
 }
@@ -381,10 +391,25 @@ func listen(chans []chan Msg) {
 	}
 }
 
-func send(s string, conn *net.UDPConn, raddr *net.UDPAddr) {
-	_, err := conn.WriteToUDP([]byte(s), raddr)
+func send(s string, conn *net.UDPConn, ra string) { //raddr *net.UDPAddr) {
+	raddr, err := net.ResolveUDPAddr("udp", ra)
 	if err != nil {
 		log.Panic(err)
+	}
+	close := false
+	if conn == nil {
+		conn, err = net.DialUDP("udp", nil, raddr)
+		if err != nil {
+			log.Panic(err)
+		}
+		close = true
+	}
+	_, err = conn.Write([]byte(s))
+	if err != nil {
+		log.Panic(err)
+	}
+	if close {
+		conn.Close()
 	}
 }
 
