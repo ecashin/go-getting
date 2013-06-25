@@ -4,7 +4,7 @@
 //
 //   * multiple states (AKA Multi-Paxos or "Parilament")
 //
-//   * history is fast-readable, requiring no Paxos instance
+//   * history is fast-readable, requiring no consensus instance
 //
 //   * NACK messages allow leaders to operate efficiently
 //
@@ -28,7 +28,7 @@
 //	 the group, it is up to date and fully participating.
 //
 //	 Nobody joins with an incomplete history, so the current
-//	 group can always be used to 
+//	 group can always answer questions about past states.
 //
 //	The peers are expected to be supplied line-by-line
 //	on standard input, in the form: a.b.c.d:p, an IP
