@@ -265,15 +265,21 @@ func lead(c chan Msg, g []string) {
 	rq := list.New()	// queued requests
 	nrq := 0		// number of queued requests
 	var r *Req		// client request in progress
-	var v *string	// value to fix; nil means can fix client value
+	var v *string	// value to fix
 	vp := int64(-1)	// proposal number associated with v
 	npromise := 0	// number of promises received for r
+	naccepts := 0	// number of accepts received for r
 	catchup := func(p int64) int64 {
 		npromise = 0
+		naccepts = 0
 		n := int64(len(g))
 		p /= n
 		p++
 		return p * n + int64(myID)
+	}
+	nextInstance := func() {
+		instance++
+		lastp = catchup(0)
 	}
 
 	everybody := make([]string, len(g)+1)
@@ -318,19 +324,37 @@ func lead(c chan Msg, g []string) {
 				npromise++
 				log.Printf("got promise from %s\n", m.ra)
 				if npromise > len(g)/2 {
+					if v == nil {
+						v = &r.v
+					}
 					log.Print("send Fix message", v)
 					s := fmt.Sprintf("Fix %d %d %s",
 						instance, lastp, v)
 					sendall(s)
 				}
 			case "Accept":
+				if r == nil {
+					log.Print("ignoring Accept with no Req in progress")
+					continue
+				}
 				a := newAccept(m.f)
-				log.Printf("got accept %v", a)
-				// XXXtodo: record accept
-				// XXXtodo:
-				//   if a quorum has accepted,
-				//     dequeue next req
-				//     start next consensus instance
+				if v == nil || a.v != *v || a.i != instance || a.p != lastp {
+					log.Panic("mismatch accept")
+				}
+				log.Printf("got accept %d %d %v", a.i, a.p, a.v)
+				naccepts++
+				if naccepts > len(g)/2 {
+					if a.v == r.v {
+						send("OK", nil, r.ra.String())
+						r = nil
+						if rq.Front() != nil {
+							e := rq.Front()
+							r = e.Value.(*Req)
+							rq.Remove(e)
+						}
+					}
+					nextInstance()
+				}
 			case "Request":
 				newr := newReq(m)
 				if r == nil {
