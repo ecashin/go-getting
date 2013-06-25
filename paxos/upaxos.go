@@ -138,7 +138,7 @@ func group() []string {
 type Msg struct {
 	f []string	// whitespace-separated message fields
 	conn *net.UDPConn
-	raddr *net.UDPAddr
+	ra *net.UDPAddr
 }
 
 func mustStrtoll(s string) (n int64) {
@@ -150,7 +150,7 @@ func mustStrtoll(s string) (n int64) {
 }
 
 // unlike Wikipedia, it's instance first
-func instanceProposal(f []string) (p, i int64) {
+func instanceProposal(f []string) (i, p int64) {
 	i = mustStrtoll(f[1])
 	p = mustStrtoll(f[2])
 	return
@@ -163,17 +163,18 @@ func instanceProposal(f []string) (p, i int64) {
 type Req struct {
 	i int64	// 0 for new instance
 	v string // ignored for history query
+	ra *net.UDPAddr   // client address
 }
-func newReq(f []string) Req {
-	if len(f) < 2 || f[0] != "Request" {
+func newReq(m Msg) Req {
+	if len(m.f) < 2 || m.f[0] != "Request" {
 		panic("called newReq with bad string")
 	}
-	i := mustStrtoll(f[1])
+	i := mustStrtoll(m.f[1])
 	s := ""
-	if len(f) > 2 {
-		s = strings.Join(f[2:], " ")
+	if len(m.f) > 2 {
+		s = strings.Join(m.f[2:], " ")
 	}
-	return Req{i, s}
+	return Req{i, s, m.ra}
 }
 
 // message format:
@@ -181,13 +182,13 @@ func newReq(f []string) Req {
 // I	instance
 // P	the proposal number the leader is attempting to use
 type Propose struct {
-	instance, p int64
+	i, p int64
 }
 func newPropose(f []string) Propose {
 	if len(f) < 3 || f[0] != "Propose" {
 		log.Panic("called newPropose with bad string")
 	}
-	p, i := instanceProposal(f)
+	i, p := instanceProposal(f)
 	return Propose{i, p}
 }
 
@@ -200,17 +201,17 @@ func newPropose(f []string) Propose {
 // V	the previously accepted value
 type Promise struct {
 	// required fields
-	minp, instance int64
+	i, p int64
 
 	// optional fields, absent if no prior accepted value
-	valp int64	// proposal number associated with the accepted value
-	value *string	// the previously accepted value, nil if none accepted
+	vp int64	// proposal number associated with the accepted value
+	v *string	// the previously accepted value, nil if none accepted
 }
 func newPromise(f []string) Promise {
 	if len(f) < 3 || f[0] != "Promise" {
 		log.Panic("called newPromise with bad string")
 	}
-	p, i := instanceProposal(f)
+	i, p := instanceProposal(f)
 	vp := int64(0)
 	var v *string
 	if len(f) > 3 {
@@ -221,7 +222,7 @@ func newPromise(f []string) Promise {
 		}
 		v = &s
 	}
-	return Promise{p, i, vp, v}
+	return Promise{i, p, vp, v}
 }
 
 // message format:
@@ -236,7 +237,7 @@ func newAccept(f []string) Accept {
 	if len(f) < 3 || f[0] != "Accept" {
 		panic("called newAccept with bad string")
 	}
-	p, i := instanceProposal(f)	
+	i, p := instanceProposal(f)	
 	return Accept{i, p, strings.Join(f[3:], " ")}
 }
 
@@ -259,7 +260,7 @@ const maxReqQ = 10	// max 10 queued requests
 // XXXtodo:
 //   * make sure v and vp are reset on new consensus instance
 func lead(c chan Msg, g []string) {
-	instance := int64(0)	// consensus instance
+	instance := int64(0)	// consensus instance leader is trying to use
 	lastp := int64(myID)	// proposal number last sent
 	rq := list.New()	// queued requests
 	nrq := 0		// number of queued requests
@@ -281,9 +282,7 @@ func lead(c chan Msg, g []string) {
 	}
 	everybody[len(g)] = myAddr
 
-	propose := func() {
-		s := fmt.Sprintf("propose I:%d P:%d V:%s",
-			instance, lastp, r.v)
+	sendall := func(s string) {
 		for _, ra := range everybody {
 			send(s, nil, ra)
 		}
@@ -299,28 +298,30 @@ func lead(c chan Msg, g []string) {
 					continue
 				}
 				p := newPromise(m.f)
-				if p.instance != instance {
-					instance = p.instance
-					lastp = catchup(p.minp)
+				if p.i != instance {
+					instance = p.i
+					lastp = catchup(p.p)
 					log.Printf("instance mismatch: %d vs %d",
-						p.instance, instance)
+						p.i, instance)
 					continue
-				} else if p.minp != lastp {
-					lastp = catchup(p.minp)
-					log.Printf("proposal mismatch (%d %d) try again", p.minp, lastp)
+				} else if p.p != lastp {
+					lastp = catchup(p.p)
+					log.Printf("proposal mismatch (%d %d) try again", p.p, lastp)
 					continue
 				}
-				if p.value != nil {
-					if p.valp > vp {
-						v = p.value
-						vp = p.valp
+				if p.v != nil {
+					if p.vp > vp {
+						v = p.v
+						vp = p.vp
 					}
 				}
 				npromise++
-				log.Printf("got promise from %s\n", m.raddr)
+				log.Printf("got promise from %s\n", m.ra)
 				if npromise > len(g)/2 {
 					log.Print("send Fix message", v)
-					// XXXtodo: send Fix message
+					s := fmt.Sprintf("Fix %d %d %s",
+						instance, lastp, v)
+					sendall(s)
 				}
 			case "Accept":
 				a := newAccept(m.f)
@@ -331,10 +332,12 @@ func lead(c chan Msg, g []string) {
 				//     dequeue next req
 				//     start next consensus instance
 			case "Request":
-				newr := newReq(m.f)
+				newr := newReq(m)
 				if r == nil {
 					r = &newr
-					propose()
+					s := fmt.Sprintf("Propose %d %d %s",
+						instance, lastp, r.v)
+					sendall(s)
 				} else if nrq < maxReqQ {
 					rq.PushBack(newr)
 					nrq++
@@ -361,13 +364,13 @@ func accept(c chan Msg) {
 		switch m.f[0] {
 		case "Propose":
 			p := newPropose(m.f)
-			min, present := minp[p.instance]
+			min, present := minp[p.i]
 			s := ""
 			if !present {
-				minp[p.instance] = p.p
-				s = fmt.Sprintf("Promise %d %d", p.instance, p.p)
+				minp[p.i] = p.p
+				s = fmt.Sprintf("Promise %d %d", p.i, p.p)
 			} else if p.p < min {
-				s = fmt.Sprintf("NACK %d %d", p.instance, minp)
+				s = fmt.Sprintf("NACK %d %d", p.i, minp)
 			} else {
 				// XXXtodo: include previously accepted value
 			}
@@ -410,7 +413,7 @@ func learn(c chan Msg, g []string) {
 				history[a.i] = newAccepts()
 			}
 			as := history[a.i]
-			h := m.raddr.String()
+			h := m.ra.String()
 			oldv, wasThere := as.v[h]
 			if wasThere && a.p < as.p[h] {
 				continue	// ignore old Accept
@@ -422,12 +425,12 @@ func learn(c chan Msg, g []string) {
 			}
 			as.n[a.v] += 1
 			log.Printf("learner got \"%s\" from %s, for %d accepts",
-				a.v, m.raddr, as.n[a.v])
+				a.v, m.ra, as.n[a.v])
 			if as.n[a.v] > len(g)/2 {
 				fixed[a.i] = a.v
 			}
 		case "Request":
-			r := newReq(m.f)
+			r := newReq(m)
 			if as, present := history[r.i]; present {
 				for v, n := range as.n {
 					if n > len(g)/2 {
