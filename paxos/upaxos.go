@@ -269,17 +269,17 @@ func lead(c chan Msg, g []string) {
 	vp := int64(-1)	// proposal number associated with v
 	npromise := 0	// number of promises received for r
 	naccepts := 0	// number of accepts received for r
-	catchup := func(p int64) int64 {
+	catchup := func(i, p int64) {
+		instance = i
 		npromise = 0
 		naccepts = 0
 		n := int64(len(g))
 		p /= n
 		p++
-		return p * n + int64(myID)
+		lastp = p * n + int64(myID)
 	}
 	nextInstance := func() {
-		instance++
-		lastp = catchup(0)
+		catchup(instance+1, 0)
 	}
 
 	everybody := make([]string, len(g)+1)
@@ -305,13 +305,13 @@ func lead(c chan Msg, g []string) {
 				}
 				p := newPromise(m.f)
 				if p.i != instance {
-					instance = p.i
-					lastp = catchup(p.p)
-					log.Printf("instance mismatch: %d vs %d",
-						p.i, instance)
+					oldi := instance
+					catchup(p.i, p.p)
+					log.Printf("instance mismatch: %d => %d",
+						oldi, p.i)
 					continue
 				} else if p.p != lastp {
-					lastp = catchup(p.p)
+					catchup(p.i, p.p)
 					log.Printf("proposal mismatch (%d %d) try again", p.p, lastp)
 					continue
 				}
@@ -371,7 +371,7 @@ func lead(c chan Msg, g []string) {
 			case "NACK":
 				nk := newNack(m.f)
 				log.Printf("NACK for instance: %d", nk.i)
-				// XXXtodo: catchup and re-propose
+				catchup(nk.i, nk.p)
 			}
 		case <- time.After(50 * time.Millisecond):
 			if rq.Front() != nil {
