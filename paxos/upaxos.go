@@ -161,8 +161,8 @@ func instanceProposal(f []string) (p, i int64) {
 // I	consensus instance (zero for new state)
 // V	the value the client wants to set (ignored for lookup)
 type Req struct {
-	instance int64	// 0 for new instance
-	val string	// ignored for history query
+	i int64	// 0 for new instance
+	v string // ignored for history query
 }
 func newReq(f []string) Req {
 	if len(f) < 2 || f[0] != "Request" {
@@ -229,22 +229,22 @@ func newPromise(f []string) Promise {
 // P	proposal number
 // V	value accepted
 type Accept struct {
-	proposal, instance int64
-	value string
+	i, p int64
+	v string
 }
 func newAccept(f []string) Accept {
 	if len(f) < 3 || f[0] != "Accept" {
 		panic("called newAccept with bad string")
 	}
 	p, i := instanceProposal(f)	
-	return Accept{p, i, strings.Join(f[3:], " ")}
+	return Accept{i, p, strings.Join(f[3:], " ")}
 }
 
 // message format:
 // I	consensus instance
 // P	minimum acceptable proposal number
 type Nack struct {
-	instance, pnum int64
+	i, p int64
 }
 func newNack(f []string) Nack {
 	if len(f) != 3 || f[0] != "NACK" {
@@ -283,7 +283,7 @@ func lead(c chan Msg, g []string) {
 
 	propose := func() {
 		s := fmt.Sprintf("propose I:%d P:%d V:%s",
-			instance, lastp, r.val)
+			instance, lastp, r.v)
 		for _, ra := range everybody {
 			send(s, nil, ra)
 		}
@@ -344,7 +344,7 @@ func lead(c chan Msg, g []string) {
 				}
 			case "NACK":
 				nk := newNack(f)
-				log.Printf("NACK for instance: %d", nk.instance)
+				log.Printf("NACK for instance: %d", nk.i)
 				// XXXtodo: catchup and re-propose
 			}
 		case <- time.After(50 * time.Millisecond):
@@ -370,10 +370,11 @@ func accept(c chan Msg) {
 			s := ""
 			if !present {
 				minp[p.instance] = p.p
-				s = fmt.Sprintf("Promise %d %d", instance, p.p)
+				s = fmt.Sprintf("Promise %d %d", p.instance, p.p)
+			} else if p.p < min {
+				s = fmt.Sprintf("NACK %d %d", p.instance, minp)
+			} else {
 				// XXXtodo: include previously accepted value
-			} else if p.p < minp {
-				s := fmt.Sprintf("NACK %d %d", instance, minp)
 			}
 			m.conn.Write([]byte(s))
 		case "Fix":
@@ -396,7 +397,6 @@ func newAcceptRecord() AcceptRecord {
 }
 func learn(c chan Msg, g []string) {
 	history := make(map[int64]AcceptRecord)
-	biggesti := -1	// biggest instance number seen so far
 	for m := range c {
 		f := strings.Fields(m.s)
 		if len(f) == 0 {
@@ -405,24 +405,24 @@ func learn(c chan Msg, g []string) {
 		switch f[0] {
 		case "Accept":
 			a := newAccept(f)
-			if _, ok := history[a.instance]; !ok {
-				history[a.instance] = newAcceptRecord()
+			if _, ok := history[a.i]; !ok {
+				history[a.i] = newAcceptRecord()
 			}
-			ar := history[a.instance]
+			ar := history[a.i]
 			oldv, wasThere := ar.h[m.raddr.String()]
-			ar.h[m.raddr.String()] = a.value
+			ar.h[m.raddr.String()] = a.v
 			if wasThere {
 				ar.q[oldv] -= 1
 			}
-			ar.q[a.value] += 1
+			ar.q[a.v] += 1
 			log.Printf("learner got \"%s\"", m.s)
 		case "Request":
 			r := newReq(f)
-			if ar, present := history[r.instance]; present {
+			if ar, present := history[r.i]; present {
 				for v, n := range ar.q {
 					if n > len(g)/2 {
 						s := fmt.Sprintf("quorum %i: %s",
-							r.instance, v)
+							r.i, v)
 						m.conn.Write([]byte(s))
 					}
 				}
