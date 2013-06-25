@@ -30,14 +30,27 @@
 //	 Nobody joins with an incomplete history, so the current
 //	 group can always answer questions about past states.
 //
-//	The peers are expected to be supplied line-by-line
-//	on standard input, in the form: a.b.c.d:p, an IP
-//	address a.b.c.d and port p.
+//	 This will be the R_1 reconfiguration scheme described in
+//	 Lamport's Reconfiguration Tutorial.
+//
+// Features for Someday or Never:
+//
+//   * history compaction in learner
+//
+//	Once the learner knows a quorum has accepted a value,
+//	it can forget all the extra information about who accepted
+//	what with what proposal number.
+//
+//   * Concurrent consensus instances
+//
+// The peers are expected to be supplied line-by-line
+// on standard input, in the form: a.b.c.d:p, an IP
+// address a.b.c.d and port p.
 //
 // example usage:
 // ecashin@atala paxos$ go run upaxos.go < upaxos-peers.txt
 //
-// ecashin@atala ~$ echo accept this | nc -u 127.0.0.1 9876
+// ecashin@atala ~$ echo Request 0 do stuff | nc -u 127.0.0.1 9876
 //
 // DESIGN
 //
@@ -136,13 +149,17 @@ func mustStrtoll(s string) (n int64) {
 	return
 }
 
-// unlike wikipedia, it's instance first
+// unlike Wikipedia, it's instance first
 func instanceProposal(f []string) (p, i int64) {
 	i = mustStrtoll(f[1])
 	p = mustStrtoll(f[2])
 	return
 }
 
+// message format:
+// Request I V
+// I	consensus instance (zero for new state)
+// V	the value the client wants to set (ignored for lookup)
 type Req struct {
 	instance int64	// 0 for new instance
 	val string	// ignored for history query
@@ -178,7 +195,7 @@ func newPropose(f []string) Propose {
 // Promise I A [B V]
 // where...
 // I	instance
-// A	the minimum proposal number sender promises to accept later
+// A	the minimum proposal number sender will accept
 // B	the proposal number associated with previously accepted value
 // V	the previously accepted value
 type Promise struct {
@@ -207,6 +224,10 @@ func newPromise(f []string) Promise {
 	return Promise{p, i, vp, v}
 }
 
+// message format:
+// I	consensus instance number
+// P	proposal number
+// V	value accepted
 type Accept struct {
 	proposal, instance int64
 	value string
@@ -219,6 +240,9 @@ func newAccept(f []string) Accept {
 	return Accept{p, i, strings.Join(f[3:], " ")}
 }
 
+// message format:
+// I	consensus instance
+// P	minimum acceptable proposal number
 type Nack struct {
 	instance, pnum int64
 }
@@ -233,16 +257,16 @@ func newNack(f []string) Nack {
 const maxReqQ = 10	// max 10 queued requests
 
 // XXXtodo:
-//   * make sure v and vp are reset on new instance
+//   * make sure v and vp are reset on new consensus instance
 func lead(c chan Msg, g []string) {
-	instance := int64(0)
+	instance := int64(0)	// consensus instance
 	lastp := int64(myID)	// proposal number last sent
 	rq := list.New()	// queued requests
 	nrq := 0		// number of queued requests
 	var r *Req		// client request in progress
 	var v *string	// value to fix; nil means can fix client value
 	vp := int64(-1)	// proposal number associated with v
-	npromise := 0
+	npromise := 0	// number of promises received for r
 	catchup := func(p int64) int64 {
 		npromise = 0
 		n := int64(len(g))
@@ -297,11 +321,16 @@ func lead(c chan Msg, g []string) {
 				npromise++
 				if npromise > len(g)/2 {
 					log.Print("send Fix message", v)
+					// XXXtodo: send Fix message
 				}
 			case "Accept":
 				a := newAccept(f)
 				log.Printf("got accept %v", a)
-//				r := rq.Front().Value.(Req)
+				// XXXtodo: record accept
+				// XXXtodo:
+				//   if a quorum has accepted,
+				//     dequeue next req
+				//     start next consensus instance
 			case "Request":
 				newr := newReq(f)
 				if r == nil {
@@ -316,6 +345,7 @@ func lead(c chan Msg, g []string) {
 			case "NACK":
 				nk := newNack(f)
 				log.Printf("NACK for instance: %d", nk.instance)
+				// XXXtodo: catchup and re-propose
 			}
 		case <- time.After(50 * time.Millisecond):
 			if rq.Front() != nil {
@@ -341,16 +371,19 @@ func accept(c chan Msg) {
 			if !present {
 				minp[p.instance] = p.p
 				s = fmt.Sprintf("Promise %d %d", instance, p.p)
+				// XXXtodo: include previously accepted value
 			} else if p.p < minp {
 				s := fmt.Sprintf("NACK %d %d", instance, minp)
 			}
 			m.conn.Write([]byte(s))
 		case "Fix":
 			log.Print("received fix")
+			// XXXtodo: send NACK or record value and send Accept
 		}
 	}
 }
 
+// The Accepts for a given consensus instance
 type AcceptRecord struct {
 	h map[string]string	// accepted values by remote addr
 	q map[string]int	// count of hosts by value accepted
