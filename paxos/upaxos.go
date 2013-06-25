@@ -63,7 +63,7 @@
 // for each such role ignore or act on the messages as appropriate.
 //
 //   leader:   handles Request, NACK, Promise, Accept;
-//   	       sends Propose, Fix, Response
+//   	       sends Propose, Fix, Fixed
 //
 //   acceptor: handles Propose, Fix;
 //   	       sends NACK, Promise, Accept
@@ -380,41 +380,61 @@ func accept(c chan Msg) {
 }
 
 // The Accepts for a given consensus instance
-type AcceptRecord struct {
-	h map[string]string	// accepted values by remote addr
-	q map[string]int	// count of hosts by value accepted
+// Storing the proposal number protects against out-of-order delivery
+// of accept messages by the network.
+type Accepts struct {
+	v map[string]string	// accepted values by remote addr
+	n map[string]int	// count of hosts by value accepted
+	p map[string]int64	// proposal number associated with value accepted by given host
 }
-func newAcceptRecord() AcceptRecord {
-	return AcceptRecord{
+func newAccepts() Accepts {
+	return Accepts {
 		make(map[string]string),
 		make(map[string]int),
+		make(map[string]int64),
 	}
 }
 func learn(c chan Msg, g []string) {
-	history := make(map[int64]AcceptRecord)
+	history := make(map[int64]Accepts)
+	fixed := make(map[int64]string)	// quorum-accepted value by instance
 	for m := range c {
 		switch m.f[0] {
 		case "Accept":
 			a := newAccept(m.f)
+			if _, ok := fixed[a.i]; ok {
+				log.Printf("ignoring Accept for fixed instance %d",
+					a.i)
+				continue
+			}
 			if _, ok := history[a.i]; !ok {
-				history[a.i] = newAcceptRecord()
+				history[a.i] = newAccepts()
 			}
-			ar := history[a.i]
-			oldv, wasThere := ar.h[m.raddr.String()]
-			ar.h[m.raddr.String()] = a.v
+			as := history[a.i]
+			h := m.raddr.String()
+			oldv, wasThere := as.v[h]
+			if wasThere && a.p < as.p[h] {
+				continue	// ignore old Accept
+			}
+			as.v[h] = a.v
+			as.p[h] = a.p
 			if wasThere {
-				ar.q[oldv] -= 1
+				as.n[oldv] -= 1
 			}
-			ar.q[a.v] += 1
-			log.Printf("learner got \"%s\" from %s", a.v, m.raddr)
+			as.n[a.v] += 1
+			log.Printf("learner got \"%s\" from %s, for %d accepts",
+				a.v, m.raddr, as.n[a.v])
+			if as.n[a.v] > len(g)/2 {
+				fixed[a.i] = a.v
+			}
 		case "Request":
 			r := newReq(m.f)
-			if ar, present := history[r.i]; present {
-				for v, n := range ar.q {
+			if as, present := history[r.i]; present {
+				for v, n := range as.n {
 					if n > len(g)/2 {
-						s := fmt.Sprintf("quorum %i: %s",
+						s := fmt.Sprintf("Fixed %i %s",
 							r.i, v)
 						m.conn.Write([]byte(s))
+						break
 					}
 				}
 			}
