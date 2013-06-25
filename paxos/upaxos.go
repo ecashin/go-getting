@@ -136,7 +136,7 @@ func group() []string {
 }
 
 type Msg struct {
-	s string
+	f []string	// whitespace-separated message fields
 	conn *net.UDPConn
 	raddr *net.UDPAddr
 }
@@ -291,18 +291,14 @@ func lead(c chan Msg, g []string) {
 	for {
 		select {
 		case m := <- c:
-			log.Printf("leader got \"%s\"", m.s)
-			f := strings.Fields(m.s)
-			if len(f) == 0 {
-				continue
-			}
-			switch f[0] {
+			log.Printf("leader got \"%s\"", m.f[0])
+			switch m.f[0] {
 			case "Promise":
 				if r == nil {
 					log.Print("ignoring Promise--no Req in progress")
 					continue
 				}
-				p := newPromise(f)
+				p := newPromise(m.f)
 				if p.instance != instance {
 					instance = p.instance
 					lastp = catchup(p.minp)
@@ -327,7 +323,7 @@ func lead(c chan Msg, g []string) {
 					// XXXtodo: send Fix message
 				}
 			case "Accept":
-				a := newAccept(f)
+				a := newAccept(m.f)
 				log.Printf("got accept %v", a)
 				// XXXtodo: record accept
 				// XXXtodo:
@@ -335,7 +331,7 @@ func lead(c chan Msg, g []string) {
 				//     dequeue next req
 				//     start next consensus instance
 			case "Request":
-				newr := newReq(f)
+				newr := newReq(m.f)
 				if r == nil {
 					r = &newr
 					propose()
@@ -346,7 +342,7 @@ func lead(c chan Msg, g []string) {
 					log.Print("send BUSY to client")
 				}
 			case "NACK":
-				nk := newNack(f)
+				nk := newNack(m.f)
 				log.Printf("NACK for instance: %d", nk.i)
 				// XXXtodo: catchup and re-propose
 			}
@@ -361,14 +357,10 @@ func accept(c chan Msg) {
 	// per-instance record of minimum proposal number we can accept
 	minp := make(map[int64]int64)
 	for m := range c {
-		log.Printf("acceptor got \"%s\"", m.s)
-		f := strings.Fields(m.s)
-		if len(f) == 0 {
-			continue
-		}
-		switch f[0] {
+		log.Printf("acceptor got \"%s\"", m.f[0])
+		switch m.f[0] {
 		case "Propose":
-			p := newPropose(f)
+			p := newPropose(m.f)
 			min, present := minp[p.instance]
 			s := ""
 			if !present {
@@ -401,13 +393,9 @@ func newAcceptRecord() AcceptRecord {
 func learn(c chan Msg, g []string) {
 	history := make(map[int64]AcceptRecord)
 	for m := range c {
-		f := strings.Fields(m.s)
-		if len(f) == 0 {
-			continue
-		}
-		switch f[0] {
+		switch m.f[0] {
 		case "Accept":
-			a := newAccept(f)
+			a := newAccept(m.f)
 			if _, ok := history[a.i]; !ok {
 				history[a.i] = newAcceptRecord()
 			}
@@ -418,9 +406,9 @@ func learn(c chan Msg, g []string) {
 				ar.q[oldv] -= 1
 			}
 			ar.q[a.v] += 1
-			log.Printf("learner got \"%s\"", m.s)
+			log.Printf("learner got \"%s\" from %s", a.v, m.raddr)
 		case "Request":
-			r := newReq(f)
+			r := newReq(m.f)
 			if ar, present := history[r.i]; present {
 				for v, n := range ar.q {
 					if n > len(g)/2 {
@@ -450,11 +438,12 @@ func listen(chans []chan Msg) {
 			log.Panic(err)
 		}
 		s := string(buf[:n])
-		if len(strings.Fields(s)) == 0 {
+		f := strings.Fields(s)
+		if len(f) == 0 {
 			continue
 		}
 		for _, c := range chans {
-			c <- Msg{s, conn, raddr}
+			c <- Msg{f, conn, raddr}
 		}
 	}
 }
@@ -505,9 +494,8 @@ func main() {
 	go listen([]chan Msg{leadc, acceptc, learnc, mainc})
 loop:
 	for m := range mainc {
-		flds := strings.Fields(m.s)
-		if len(flds) > 0 {
-			switch flds[0] {
+		if len(m.f) > 0 {
+			switch m.f[0] {
 			case "quit": fallthrough
 			case "exit": fallthrough
 			case "bye":
