@@ -299,17 +299,19 @@ func lead(c chan Msg, g []string) {
 			switch f[0] {
 			case "Promise":
 				if r == nil {
+					log.Print("ignoring Promise--no Req in progress")
 					continue
 				}
 				p := newPromise(f)
 				if p.instance != instance {
 					instance = p.instance
 					lastp = catchup(p.minp)
-					log.Print("try again")
+					log.Printf("instance mismatch: %d vs %d",
+						p.instance, instance)
 					continue
 				} else if p.minp != lastp {
 					lastp = catchup(p.minp)
-					log.Print("try again")
+					log.Printf("proposal mismatch (%d %d) try again", p.minp, lastp)
 					continue
 				}
 				if p.value != nil {
@@ -319,6 +321,7 @@ func lead(c chan Msg, g []string) {
 					}
 				}
 				npromise++
+				log.Printf("got promise from %s\n", m.raddr)
 				if npromise > len(g)/2 {
 					log.Print("send Fix message", v)
 					// XXXtodo: send Fix message
