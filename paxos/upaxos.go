@@ -310,7 +310,6 @@ func lead(c chan Msg, g []string) {
 	for {
 		select {
 		case m := <- c:
-			log.Printf("leader got \"%s\"", m.f[0])
 			switch m.f[0] {
 			case "Promise":
 				if r == nil {
@@ -387,11 +386,8 @@ func lead(c chan Msg, g []string) {
 				log.Printf("NACK for instance: %d", nk.i)
 				catchup(nk.i, nk.p)
 			}
-		// XXXtodo: make this make sense
-		case <- time.After(50 * time.Millisecond):
-			if rq.Front() != nil {
-				log.Print("service request")
-			}
+		case <- time.After(30 * time.Second):
+			log.Print("tick tock")	// demo
 		}
 	}
 }
@@ -400,7 +396,6 @@ func accept(c chan Msg) {
 	minp := make(map[int64]int64)
 	accepted := make(map[int64]string)	// values by instance
 	for m := range c {
-		log.Printf("acceptor got \"%s\"", m.f[0])
 		switch m.f[0] {
 		case "Propose":
 			p := newPropose(m.f)
