@@ -409,7 +409,10 @@ func accept(c chan Msg) {
 			} else if p.p < min {
 				s = fmt.Sprintf("NACK %d %d", p.i, minp)
 			} else {
-				// XXXtodo: include previously accepted value
+				s = fmt.Sprintf("Promise %d %d", p.i, p.p)
+				if va, there := accepted[p.i]; there {
+					s += " " + va
+				}
 			}
 			m.conn.Write([]byte(s))
 		case "Fix":
