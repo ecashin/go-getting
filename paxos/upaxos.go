@@ -156,8 +156,7 @@ func instanceProposal(f []string) (i, p int64) {
 	return
 }
 
-// message format:
-// Request I V
+// Request message format:
 // I	consensus instance (zero for new state)
 // V	the value the client wants to set (ignored for lookup)
 type Req struct {
@@ -177,8 +176,7 @@ func newReq(m Msg) Req {
 	return Req{i, s, m.ra}
 }
 
-// message format:
-// Propose I P
+// Propose message format:
 // I	instance
 // P	the proposal number the leader is attempting to use
 type Propose struct {
@@ -192,9 +190,7 @@ func newPropose(f []string) Propose {
 	return Propose{i, p}
 }
 
-// message format:
-// Promise I A [B V]
-// where...
+// Promise message format is "Promise I A [B V]", where...
 // I	instance
 // A	the minimum proposal number sender will accept
 // B	the proposal number associated with previously accepted value
@@ -225,7 +221,7 @@ func newPromise(f []string) Promise {
 	return Promise{i, p, vp, v}
 }
 
-// message format:
+// Accept message format:
 // I	consensus instance number
 // P	proposal number
 // V	value accepted
@@ -253,6 +249,22 @@ func newNack(f []string) Nack {
 	}
 	i, p := instanceProposal(f)
 	return Nack{i, p}
+}
+
+// Fix message format:
+// I	consensus instance
+// P	proposal number
+// V	value
+type Fix struct {
+	i, p int64
+	v string
+}
+func newFix(f []string) Fix {
+	if len(f) < 3 || f[0] != "Fix" {
+		panic("called newAccept with bad string")
+	}
+	i, p := instanceProposal(f)	
+	return Fix{i, p, strings.Join(f[3:], " ")}
 }
 
 const maxReqQ = 10	// max 10 queued requests
@@ -383,6 +395,7 @@ func lead(c chan Msg, g []string) {
 func accept(c chan Msg) {
 	// per-instance record of minimum proposal number we can accept
 	minp := make(map[int64]int64)
+	accepted := make(map[int64]string)	// values by instance
 	for m := range c {
 		log.Printf("acceptor got \"%s\"", m.f[0])
 		switch m.f[0] {
@@ -401,7 +414,23 @@ func accept(c chan Msg) {
 			m.conn.Write([]byte(s))
 		case "Fix":
 			log.Print("received fix")
-			// XXXtodo: send NACK or record value and send Accept
+			fx := newFix(m.f)
+			min, there := minp[fx.i]
+			s := ""
+			if there && min > fx.p {
+				log.Printf("acceptor with min %d ignoring Fix %d %d %v",
+					min, fx.i, fx.p, fx.v)
+				s = fmt.Sprintf("NACK %d %d", fx.i, min)
+			} else {
+				s = fmt.Sprintf("Accept %d %d", fx.i, fx.p)
+				if va, there := accepted[fx.i]; there {
+					s += " " + va
+				} else {
+					accepted[fx.i] = fx.v
+					s += " " + fx.v
+				}
+			}
+			m.conn.Write([]byte(s))
 		}
 	}
 }
