@@ -269,8 +269,6 @@ func newFix(f []string) Fix {
 
 const maxReqQ = 10	// max 10 queued requests
 
-// XXXtodo:
-//   * make sure v and vp are reset on new consensus instance
 func lead(c chan Msg, g []string) {
 	instance := int64(0)	// consensus instance leader is trying to use
 	lastp := int64(myID)	// proposal number last sent
@@ -282,6 +280,10 @@ func lead(c chan Msg, g []string) {
 	npromise := 0	// number of promises received for r
 	naccepts := 0	// number of accepts received for r
 	catchup := func(i, p int64) {
+		if i != instance {
+			v = nil
+			vp = int64(-1)
+		}
 		instance = i
 		npromise = 0
 		naccepts = 0
@@ -385,6 +387,7 @@ func lead(c chan Msg, g []string) {
 				log.Printf("NACK for instance: %d", nk.i)
 				catchup(nk.i, nk.p)
 			}
+		// XXXtodo: make this make sense
 		case <- time.After(50 * time.Millisecond):
 			if rq.Front() != nil {
 				log.Print("service request")
