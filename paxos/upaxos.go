@@ -137,8 +137,7 @@ func group() []string {
 
 type Msg struct {
 	f []string	// whitespace-separated message fields
-	conn *net.UDPConn
-	ra *net.UDPAddr
+	ra string
 }
 
 func mustStrtoll(s string) (n int64) {
@@ -162,7 +161,7 @@ func instanceProposal(f []string) (i, p int64) {
 type Req struct {
 	i int64	// 0 for new instance
 	v string // ignored for history query
-	ra *net.UDPAddr   // client address
+	ra string // client address
 }
 func newReq(m Msg) Req {
 	if len(m.f) < 2 || m.f[0] != "Request" {
@@ -358,7 +357,7 @@ func lead(c chan Msg, g []string) {
 				naccepts++
 				if naccepts > len(g)/2 {
 					if a.v == r.v {
-						send("OK", r.ra.String())
+						send("OK", r.ra)
 						r = nil
 						if rq.Front() != nil {
 							e := rq.Front()
@@ -412,7 +411,7 @@ func accept(c chan Msg) {
 					s += " " + va
 				}
 			}
-			m.conn.Write([]byte(s))
+			send(s, m.ra)
 		case "Fix":
 			log.Print("received fix")
 			fx := newFix(m.f)
@@ -431,7 +430,7 @@ func accept(c chan Msg) {
 					s += " " + fx.v
 				}
 			}
-			m.conn.Write([]byte(s))
+			send(s, m.ra)
 		}
 	}
 }
@@ -467,7 +466,7 @@ func learn(c chan Msg, g []string) {
 				history[a.i] = newAccepts()
 			}
 			as := history[a.i]
-			h := m.ra.String()
+			h := m.ra
 			oldv, wasThere := as.v[h]
 			if wasThere && a.p < as.p[h] {
 				continue	// ignore old Accept
@@ -490,7 +489,7 @@ func learn(c chan Msg, g []string) {
 					if n > len(g)/2 {
 						s := fmt.Sprintf("Fixed %i %s",
 							r.i, v)
-						m.conn.Write([]byte(s))
+						send(s, m.ra)
 						break
 					}
 				}
@@ -520,7 +519,7 @@ func listen(chans []chan Msg) {
 			continue
 		}
 		for _, c := range chans {
-			c <- Msg{f, conn, raddr}
+			c <- Msg{f, raddr.String()}
 		}
 	}
 }
