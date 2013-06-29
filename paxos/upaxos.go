@@ -304,7 +304,7 @@ func lead(c chan Msg, g []string) {
 
 	sendall := func(s string) {
 		for _, ra := range everybody {
-			send(s, nil, ra)
+			send(s, ra)
 		}
 	}
 	for {
@@ -358,7 +358,7 @@ func lead(c chan Msg, g []string) {
 				naccepts++
 				if naccepts > len(g)/2 {
 					if a.v == r.v {
-						send("OK", nil, r.ra.String())
+						send("OK", r.ra.String())
 						r = nil
 						if rq.Front() != nil {
 							e := rq.Front()
@@ -525,26 +525,24 @@ func listen(chans []chan Msg) {
 	}
 }
 
-func send(s string, conn *net.UDPConn, ra string) { //raddr *net.UDPAddr) {
+func send(s string, ra string) { //raddr *net.UDPAddr) {
 	log.Printf("sending to %s: %s", ra, s)
 	raddr, err := net.ResolveUDPAddr("udp", ra)
 	if err != nil {
 		log.Panic(err)
 	}
-	close := false
-	if conn == nil {
-		conn, err = net.DialUDP("udp", nil, raddr)
-		if err != nil {
-			log.Panic(err)
-		}
-		close = true
-	}
-	_, err = conn.Write([]byte(s))
+	laddr, err := net.ResolveUDPAddr("udp", myAddr)
 	if err != nil {
 		log.Panic(err)
 	}
-	if close {
-		conn.Close()
+	conn, err := net.DialUDP("udp", laddr, raddr)
+	if err != nil {
+		log.Panic(err)
+	}
+	defer conn.Close()
+	_, err = conn.Write([]byte(s))
+	if err != nil {
+		log.Panic(err)
 	}
 }
 
