@@ -138,7 +138,7 @@ func group() []string {
 
 type Msg struct {
 	f []string	// whitespace-separated message fields
-	ra string
+	conn *net.UDPConn
 }
 
 func mustStrtoll(s string) (n int64) {
@@ -162,7 +162,7 @@ func instanceProposal(f []string) (i, p int64) {
 type Req struct {
 	i int64	// 0 for new instance
 	v string // ignored for history query
-	ra string // client address
+	conn *net.UDPConn
 }
 func newReq(m Msg) Req {
 	if len(m.f) < 2 || m.f[0] != "Request" {
@@ -173,7 +173,7 @@ func newReq(m Msg) Req {
 	if len(m.f) > 2 {
 		s = strings.Join(m.f[2:], " ")
 	}
-	return Req{i, s, m.ra}
+	return Req{i, s, m.conn}
 }
 
 // Propose message format:
@@ -335,7 +335,8 @@ func lead(c chan Msg, g []string) {
 					}
 				}
 				npromise++
-				log.Printf("got promise from %s\n", m.ra)
+				log.Printf("got promise from %s\n",
+					m.conn.RemoteAddr().String())
 				if npromise > len(g)/2 {
 					if v == nil {
 						v = &r.v
@@ -358,7 +359,7 @@ func lead(c chan Msg, g []string) {
 				naccepts++
 				if naccepts > len(g)/2 {
 					if a.v == r.v {
-						send("OK", r.ra)
+						r.conn.Write([]byte("OK"))
 						r = nil
 						if rq.Front() != nil {
 							e := rq.Front()
@@ -412,7 +413,7 @@ func accept(c chan Msg) {
 					s += " " + va
 				}
 			}
-			send(s, m.ra)
+			m.conn.Write([]byte(s))
 		case "Fix":
 			log.Print("received fix")
 			fx := newFix(m.f)
@@ -431,7 +432,7 @@ func accept(c chan Msg) {
 					s += " " + fx.v
 				}
 			}
-			send(s, m.ra)
+			m.conn.Write([]byte(s))
 		}
 	}
 }
@@ -467,7 +468,7 @@ func learn(c chan Msg, g []string) {
 				history[a.i] = newAccepts()
 			}
 			as := history[a.i]
-			h := m.ra
+			h := m.conn.RemoteAddr().String()
 			oldv, wasThere := as.v[h]
 			if wasThere && a.p < as.p[h] {
 				continue	// ignore old Accept
@@ -479,7 +480,7 @@ func learn(c chan Msg, g []string) {
 			}
 			as.n[a.v] += 1
 			log.Printf("learner got \"%s\" from %s, for %d accepts",
-				a.v, m.ra, as.n[a.v])
+				a.v, m.conn.RemoteAddr().String(), as.n[a.v])
 			if as.n[a.v] > len(g)/2 {
 				fixed[a.i] = a.v
 			}
@@ -490,7 +491,7 @@ func learn(c chan Msg, g []string) {
 					if n > len(g)/2 {
 						s := fmt.Sprintf("Fixed %i %s",
 							r.i, v)
-						send(s, m.ra)
+						m.conn.Write([]byte(s))
 						break
 					}
 				}
@@ -502,7 +503,7 @@ func learn(c chan Msg, g []string) {
 func listen(conn *net.UDPConn) {
 	buf := make([]byte, 9999)
 	for {
-		n, raddr, err := conn.ReadFromUDP(buf)
+		n, _, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -512,7 +513,7 @@ func listen(conn *net.UDPConn) {
 			continue
 		}
 		for _, c := range receivers {
-			c <- Msg{f, raddr.String()}
+			c <- Msg{f, conn}
 		}
 	}
 }
