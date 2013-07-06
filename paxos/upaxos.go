@@ -517,24 +517,40 @@ func listen(conn *net.UDPConn) {
 	}
 }
 
-func send(s string, ra string) { //raddr *net.UDPAddr) {
-	log.Printf("sending to %s: %s", ra, s)
-	raddr, err := net.ResolveUDPAddr("udp", ra)
-	if err != nil {
-		log.Panic(err)
-	}
-	laddr, err := net.ResolveUDPAddr("udp", myAddr)
-	if err != nil {
-		log.Panic(err)
-	}
-	conn, err := net.DialUDP("udp", laddr, raddr)
-	if err != nil {
-		log.Panic(err)
-	}
-	defer conn.Close()
-	_, err = conn.Write([]byte(s))
-	if err != nil {
-		log.Panic(err)
+type sendMsg struct {
+	s, ra string
+}
+var sendChan chan sendMsg
+func send(s, ra string) {
+	sendChan <- sendMsg{s, ra}
+}
+func sender() {
+	conns := make(map[string] *net.UDPConn)
+	for sm := range sendChan {
+		s := sm.s
+		ra := sm.ra
+		log.Printf("sending to %s: %s", ra, s)
+		if conn, ok := conns[ra]; !ok {
+			raddr, err := net.ResolveUDPAddr("udp", ra)
+			if err != nil {
+				log.Panic(err)
+			}
+			laddr, err := net.ResolveUDPAddr("udp", myAddr)
+			if err != nil {
+				log.Panic(err)
+			}
+			conn, err := net.DialUDP("udp", laddr, raddr)
+			if err != nil {
+				log.Panic(err)
+			}
+			go listen(conn)
+			conns[ra] = conn
+		} else {
+			_, err := conn.Write([]byte(s))
+			if err != nil {
+				log.Panic(err)
+			}
+		}
 	}
 }
 
@@ -551,15 +567,19 @@ func main() {
 	for i := 0; i < len(g); i++ {
 		log.Print(g[i])
 	}
+
+	sendChan = make(chan sendMsg)
+	go sender()
+
 	leadc := make(chan Msg)
 	acceptc := make(chan Msg)
 	learnc := make(chan Msg)
 	mainc := make(chan Msg)
+	receivers = []chan Msg{leadc, acceptc, learnc, mainc}
 	go lead(leadc, g)
 	go accept(acceptc)
 	go learn(learnc, g)
 
-	receivers = []chan Msg{leadc, acceptc, learnc, mainc}
 	la, err := net.ResolveUDPAddr("udp4", myAddr)
 	if err != nil {
 		log.Panic(err)
