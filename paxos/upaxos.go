@@ -101,6 +101,7 @@ import (
 
 var myAddr string
 var myID int = -1
+var receivers []chan Msg
 
 func group() []string {
 	grp := list.New()
@@ -498,15 +499,7 @@ func learn(c chan Msg, g []string) {
 	}
 }
 
-func listen(chans []chan Msg) {
-	la, err := net.ResolveUDPAddr("udp4", myAddr)
-	if err != nil {
-		log.Panic(err)
-	}
-	conn, err := net.ListenUDP("udp4", la)
-	if err != nil {
-		log.Panic(err)
-	}
+func listen(conn *net.UDPConn) {
 	buf := make([]byte, 9999)
 	for {
 		n, raddr, err := conn.ReadFromUDP(buf)
@@ -518,7 +511,7 @@ func listen(chans []chan Msg) {
 		if len(f) == 0 {
 			continue
 		}
-		for _, c := range chans {
+		for _, c := range receivers {
 			c <- Msg{f, raddr.String()}
 		}
 	}
@@ -565,7 +558,17 @@ func main() {
 	go lead(leadc, g)
 	go accept(acceptc)
 	go learn(learnc, g)
-	go listen([]chan Msg{leadc, acceptc, learnc, mainc})
+
+	receivers = []chan Msg{leadc, acceptc, learnc, mainc}
+	la, err := net.ResolveUDPAddr("udp4", myAddr)
+	if err != nil {
+		log.Panic(err)
+	}
+	conn, err := net.ListenUDP("udp4", la)
+	if err != nil {
+		log.Panic(err)
+	}
+	go listen(conn)
 loop:
 	for m := range mainc {
 		if len(m.f) > 0 {
