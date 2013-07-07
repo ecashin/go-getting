@@ -548,26 +548,22 @@ func sender() {
 		s := sm.s
 		ra := sm.ra
 		log.Printf("sending to %s: %s", ra, s)
-		if conn, ok := conns[ra]; !ok {
+		conn, ok := conns[ra]
+		if !ok {
 			raddr, err := net.ResolveUDPAddr("udp", ra)
 			if err != nil {
 				log.Panic(err)
 			}
-			laddr, err := net.ResolveUDPAddr("udp", myAddr)
-			if err != nil {
-				log.Panic(err)
-			}
-			conn, err := net.DialUDP("udp", laddr, raddr)
+			conn, err = net.DialUDP("udp", nil, raddr)
 			if err != nil {
 				log.Panic(err)
 			}
 			go listen(conn)
 			conns[ra] = conn
-		} else {
-			_, err := conn.Write([]byte(s))
-			if err != nil {
-				log.Panic(err)
-			}
+		}
+		_, err := conn.Write([]byte(s))
+		if err != nil {
+			log.Panic(err)
 		}
 	}
 }
