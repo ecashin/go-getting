@@ -141,6 +141,17 @@ type Msg struct {
 	conn *net.UDPConn
 }
 
+func respond(conn *net.UDPConn, s string) {
+	if conn != nil {
+		conn.Write([]byte(s))
+	} else {
+		// respond to myself
+		for _, recvr := range receivers {
+			recvr <- Msg{strings.Fields(s), nil}
+		}
+	}
+}
+
 func mustStrtoll(s string) (n int64) {
 	n, err := strconv.ParseInt(s, 0, 64)
 	if err != nil {
@@ -303,8 +314,14 @@ func lead(c chan Msg, g []string) {
 	everybody[len(g)] = myAddr
 
 	sendall := func(s string) {
-		for _, ra := range everybody {
-			send(s, ra)
+		for _, ra := range g {
+			if ra != myAddr {
+				send(s, ra)
+			}
+		}
+		// send the message to myself, too, all receiver goroutines
+		for _, recvr := range receivers {
+			recvr <- Msg{strings.Fields(s), nil}
 		}
 	}
 	for {
@@ -359,7 +376,7 @@ func lead(c chan Msg, g []string) {
 				naccepts++
 				if naccepts > len(g)/2 {
 					if a.v == r.v {
-						r.conn.Write([]byte("OK"))
+						respond(r.conn, "OK")
 						r = nil
 						if rq.Front() != nil {
 							e := rq.Front()
@@ -413,7 +430,7 @@ func accept(c chan Msg) {
 					s += " " + va
 				}
 			}
-			m.conn.Write([]byte(s))
+			respond(m.conn, s)
 		case "Fix":
 			log.Print("received fix")
 			fx := newFix(m.f)
@@ -432,7 +449,7 @@ func accept(c chan Msg) {
 					s += " " + fx.v
 				}
 			}
-			m.conn.Write([]byte(s))
+			respond(m.conn, s)
 		}
 	}
 }
@@ -491,7 +508,7 @@ func learn(c chan Msg, g []string) {
 					if n > len(g)/2 {
 						s := fmt.Sprintf("Fixed %i %s",
 							r.i, v)
-						m.conn.Write([]byte(s))
+						respond(m.conn, s)
 						break
 					}
 				}
