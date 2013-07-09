@@ -83,6 +83,18 @@
 // roles, and the combinations mean there are very many states.
 //
 // Using goroutines should result in more understandable code.
+//
+// Paxos over TCP would be complicated by the extra functionality
+// of TCP that insulates software from the realities that Paxos is
+// designed for, like failing networks and nodes.  Ideally, you'd
+// use the broadcast MAC address with a protocol that's like arp
+// or AoE, so that ports and such don't get in the way.
+//
+// For convenience (non-root development and testing on multiple 
+// platforms) UDP is used, but the sender is included in the message.
+// RFC 768 says the platform doesn't have to set the port when it is
+// not specified by the sender, but you can't listen on one port and
+// also use that same port as the source address to send.
 
 package main
 
