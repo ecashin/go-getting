@@ -527,6 +527,7 @@ func listen(conn *net.UDPConn) {
 		s := string(buf[:n])
 		f := strings.Fields(s)
 		if len(f) == 0 {
+			log.Print("skipping zero-field message")
 			continue
 		}
 		for _, c := range receivers {
@@ -550,21 +551,25 @@ func sender() {
 		log.Printf("sending to %s: %s", ra, s)
 		conn, ok := conns[ra]
 		if !ok {
-			raddr, err := net.ResolveUDPAddr("udp", ra)
+			log.Print("making new connection")
+			raddr, err := net.ResolveUDPAddr("udp4", ra)
 			if err != nil {
 				log.Panic(err)
 			}
-			conn, err = net.DialUDP("udp", nil, raddr)
+			conn, err = net.DialUDP("udp4", nil, raddr)
 			if err != nil {
 				log.Panic(err)
 			}
 			go listen(conn)
 			conns[ra] = conn
+		} else {
+			log.Print("using existing connection")
 		}
-		_, err := conn.Write([]byte(s))
+		n, err := conn.Write([]byte(s))
 		if err != nil {
 			log.Panic(err)
 		}
+		log.Printf("sent %d bytes", n)
 	}
 }
 
@@ -574,12 +579,19 @@ func init() {
 }
 func main() {
 	flag.Parse()
+	g := group()
+
 	log.Print("upaxos started at ", myAddr)
 	defer log.Print("upaxos ending")
 
-	g := group()
-	for i := 0; i < len(g); i++ {
-		log.Print(g[i])
+	// begin listening on my well known address
+	la, err := net.ResolveUDPAddr("udp4", myAddr)
+	if err != nil {
+		log.Panic(err)
+	}
+	conn, err := net.ListenUDP("udp4", la)
+	if err != nil {
+		log.Panic(err)
 	}
 
 	sendChan = make(chan sendMsg)
@@ -593,15 +605,6 @@ func main() {
 	go lead(leadc, g)
 	go accept(acceptc)
 	go learn(learnc, g)
-
-	la, err := net.ResolveUDPAddr("udp4", myAddr)
-	if err != nil {
-		log.Panic(err)
-	}
-	conn, err := net.ListenUDP("udp4", la)
-	if err != nil {
-		log.Panic(err)
-	}
 	go listen(conn)
 loop:
 	for m := range mainc {
