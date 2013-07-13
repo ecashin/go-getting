@@ -1,4 +1,4 @@
-// upaxos.go - UDP-based Paxos participant implementation
+// upaxos.go - unreliable-broadcast-based Paxos participant
 //
 // Features for short term:
 //
@@ -43,14 +43,12 @@
 //
 //   * Concurrent consensus instances
 //
-// The peers are expected to be supplied line-by-line
-// on standard input, in the form: a.b.c.d:p, an IP
-// address a.b.c.d and port p.
-//
 // example usage:
-// ecashin@atala paxos$ go run upaxos.go < upaxos-peers.txt
+// ecashin@atala paxos$ sudo go run upaxos.go -n 3 -i 0 &
+// ecashin@atala paxos$ sudo go run upaxos.go -n 3 -i 1 &
+// ecashin@atala paxos$ sudo go run upaxos.go -n 3 -i 2 &
 //
-// ecashin@atala ~$ echo Request 0 do stuff | nc -u 127.0.0.1 9876
+// ecashin@atala ~$ echo Request 0 do stuff | sudo go run ip253-send.go
 //
 // DESIGN
 //
@@ -86,82 +84,29 @@
 //
 // Paxos over TCP would be complicated by the extra functionality
 // of TCP that insulates software from the realities that Paxos is
-// designed for, like failing networks and nodes.  Ideally, you'd
-// use the broadcast MAC address with a protocol that's like arp
-// or AoE, so that ports and such don't get in the way.
-//
-// For convenience (non-root development and testing on multiple 
-// platforms) UDP is used, but the sender is included in the message.
-// RFC 768 says the platform doesn't have to set the port when it is
-// not specified by the sender, but you can't listen on one port and
-// also use that same port as the source address to send.
+// designed for, like failing networks and nodes.  Broadcast is
+// especially nice, since several optimizations are allowed by
+// snooping.
 
 package main
 
 import (
-	"bufio"
 	"container/list"
 	"flag"
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
-var myAddr string
 var myID int = -1
+var nGroup int = -1
 var receivers []chan Msg
-
-func group() []string {
-	grp := list.New()
-	in := bufio.NewReader(os.Stdin)
-	line, err := in.ReadSlice('\n')
-	i := 0
-	for err == nil {
-		fields := strings.Fields(string(line))
-		if len(fields) > 0 {
-			s := fields[0]
-			grp.PushBack(s)
-			if fields[0] == myAddr {
-				myID = i
-				s = fmt.Sprintf("  me: %s %d", s, i)
-			} else {
-				s = "peer: " + s
-			}
-			i += 1
-			log.Print(s)
-		}
-		line, err = in.ReadSlice('\n')
-	}
-	g := make([]string, i)
-	i = 0
-	for e := grp.Front(); e != nil; e = e.Next() {
-		g[i] = e.Value.(string)
-		i++
-	}
-	if myID == -1 {
-		log.Panic("could not determine my proposal number set")
-	}
-	return g
-}
 
 type Msg struct {
 	f []string	// whitespace-separated message fields
-	conn *net.UDPConn
-}
-
-func respond(conn *net.UDPConn, s string) {
-	if conn != nil {
-		conn.Write([]byte(s))
-	} else {
-		// respond to myself
-		for _, recvr := range receivers {
-			recvr <- Msg{strings.Fields(s), nil}
-		}
-	}
 }
 
 func mustStrtoll(s string) (n int64) {
@@ -173,9 +118,10 @@ func mustStrtoll(s string) (n int64) {
 }
 
 // unlike Wikipedia, it's instance first
-func instanceProposal(f []string) (i, p int64) {
-	i = mustStrtoll(f[1])
-	p = mustStrtoll(f[2])
+func sipParse(f []string) (s, i, p int64) {
+	s = mustStrtoll(f[0])
+	i = mustStrtoll(f[2])
+	p = mustStrtoll(f[3])
 	return
 }
 
@@ -185,7 +131,6 @@ func instanceProposal(f []string) (i, p int64) {
 type Req struct {
 	i int64	// 0 for new instance
 	v string // ignored for history query
-	conn *net.UDPConn
 }
 func newReq(m Msg) Req {
 	if len(m.f) < 2 || m.f[0] != "Request" {
@@ -196,103 +141,112 @@ func newReq(m Msg) Req {
 	if len(m.f) > 2 {
 		s = strings.Join(m.f[2:], " ")
 	}
-	return Req{i, s, m.conn}
+	return Req{i, s}
 }
 
 // Propose message format:
+// S	sender ID
 // I	instance
 // P	the proposal number the leader is attempting to use
 type Propose struct {
-	i, p int64
+	s, i, p int64
 }
 func newPropose(f []string) Propose {
-	if len(f) < 3 || f[0] != "Propose" {
+	if len(f) < 4 || f[1] != "Propose" {
 		log.Panic("called newPropose with bad string")
 	}
-	i, p := instanceProposal(f)
-	return Propose{i, p}
+	s, i, p := sipParse(f)
+	return Propose{s, i, p}
 }
 
-// Promise message format is "Promise I A [B V]", where...
+// Promise message format is "S Promise I A [B V]", where...
+// S	sender ID
 // I	instance
 // A	the minimum proposal number sender will accept
 // B	the proposal number associated with previously accepted value
 // V	the previously accepted value
 type Promise struct {
 	// required fields
-	i, p int64
+	s, i, p int64
 
 	// optional fields, absent if no prior accepted value
 	vp int64	// proposal number associated with the accepted value
 	v *string	// the previously accepted value, nil if none accepted
 }
 func newPromise(f []string) Promise {
-	if len(f) < 3 || f[0] != "Promise" {
+	if len(f) < 4 || f[1] != "Promise" {
 		log.Panic("called newPromise with bad string")
 	}
-	i, p := instanceProposal(f)
+	src, i, p := sipParse(f)
 	vp := int64(0)
 	var v *string
-	if len(f) > 3 {
-		vp = mustStrtoll(f[3])
+	if len(f) > 4 {
+		vp = mustStrtoll(f[4])
 		s := ""
-		if len(f) > 4 {
-			s = strings.Join(f[4:], " ")
+		if len(f) > 5 {
+			s = strings.Join(f[5:], " ")
 		}
 		v = &s
 	}
-	return Promise{i, p, vp, v}
+	return Promise{src, i, p, vp, v}
 }
 
 // Accept message format:
+// S	sender ID
 // I	consensus instance number
 // P	proposal number
 // V	value accepted
 type Accept struct {
-	i, p int64
+	s, i, p int64
 	v string
 }
 func newAccept(f []string) Accept {
-	if len(f) < 3 || f[0] != "Accept" {
+	if len(f) < 4 || f[1] != "Accept" {
 		panic("called newAccept with bad string")
 	}
-	i, p := instanceProposal(f)	
-	return Accept{i, p, strings.Join(f[3:], " ")}
+	src, i, p := sipParse(f)
+	s := ""
+	if len(f) > 4 {
+		s = strings.Join(f[4:], " ")
+	}
+	return Accept{src, i, p, s}
 }
 
 // message format:
+// S	sender ID
 // I	consensus instance
 // P	minimum acceptable proposal number
 type Nack struct {
-	i, p int64
+	s, i, p int64
 }
 func newNack(f []string) Nack {
-	if len(f) != 3 || f[0] != "NACK" {
+	if len(f) != 4 || f[1] != "NACK" {
 		panic("called newNack on bad string")
 	}
-	i, p := instanceProposal(f)
-	return Nack{i, p}
+	s, i, p := sipParse(f)
+	return Nack{s, i, p}
 }
 
 // Fix message format:
+// S	sender ID
 // I	consensus instance
 // P	proposal number
 // V	value
 type Fix struct {
-	i, p int64
+	s, i, p int64
 	v string
 }
 func newFix(f []string) Fix {
-	if len(f) < 3 || f[0] != "Fix" {
+	if len(f) < 4 || f[1] != "Fix" {
 		panic("called newAccept with bad string")
 	}
-	i, p := instanceProposal(f)	
-	return Fix{i, p, strings.Join(f[3:], " ")}
+	s, i, p := sipParse(f)	
+	return Fix{s, i, p, strings.Join(f[4:], " ")}
 }
 
 const maxReqQ = 10	// max 10 queued requests
 
-func lead(c chan Msg, g []string) {
+func lead(c chan Msg) {
 	instance := int64(0)	// consensus instance leader is trying to use
 	lastp := int64(myID)	// proposal number last sent
 	rq := list.New()	// queued requests
@@ -310,7 +264,7 @@ func lead(c chan Msg, g []string) {
 		instance = i
 		npromise = 0
 		naccepts = 0
-		n := int64(len(g))
+		n := int64(nGroup)
 		p /= n
 		p++
 		lastp = p * n + int64(myID)
@@ -319,23 +273,6 @@ func lead(c chan Msg, g []string) {
 		catchup(instance+1, 0)
 	}
 
-	everybody := make([]string, len(g)+1)
-	for i, _ := range g {
-		everybody[i] = g[i]
-	}
-	everybody[len(g)] = myAddr
-
-	sendall := func(s string) {
-		for _, ra := range g {
-			if ra != myAddr {
-				send(s, ra)
-			}
-		}
-		// send the message to myself, too, all receiver goroutines
-		for _, recvr := range receivers {
-			recvr <- Msg{strings.Fields(s), nil}
-		}
-	}
 	for {
 		select {
 		case m := <- c:
@@ -364,16 +301,15 @@ func lead(c chan Msg, g []string) {
 					}
 				}
 				npromise++
-				log.Printf("got promise from %s\n",
-					m.conn.RemoteAddr().String())
-				if npromise > len(g)/2 {
+				log.Printf("got promise from %d\n", p.s)
+				if npromise > nGroup/2 {
 					if v == nil {
 						v = &r.v
 					}
 					log.Print("send Fix message", v)
 					s := fmt.Sprintf("Fix %d %d %s",
 						instance, lastp, v)
-					sendall(s)
+					send(s)
 				}
 			case "Accept":
 				if r == nil {
@@ -386,9 +322,9 @@ func lead(c chan Msg, g []string) {
 				}
 				log.Printf("got accept %d %d %v", a.i, a.p, a.v)
 				naccepts++
-				if naccepts > len(g)/2 {
+				if naccepts > nGroup/2 {
 					if a.v == r.v {
-						respond(r.conn, "OK")
+						send("OK")
 						r = nil
 						if rq.Front() != nil {
 							e := rq.Front()
@@ -404,7 +340,7 @@ func lead(c chan Msg, g []string) {
 					r = &newr
 					s := fmt.Sprintf("Propose %d %d %s",
 						instance, lastp, r.v)
-					sendall(s)
+					send(s)
 				} else if nrq < maxReqQ {
 					rq.PushBack(newr)
 					nrq++
@@ -442,7 +378,7 @@ func accept(c chan Msg) {
 					s += " " + va
 				}
 			}
-			respond(m.conn, s)
+			send(s)
 		case "Fix":
 			log.Print("received fix")
 			fx := newFix(m.f)
@@ -461,7 +397,7 @@ func accept(c chan Msg) {
 					s += " " + fx.v
 				}
 			}
-			respond(m.conn, s)
+			send(s)
 		}
 	}
 }
@@ -470,18 +406,18 @@ func accept(c chan Msg) {
 // Storing the proposal number protects against out-of-order delivery
 // of accept messages by the network.
 type Accepts struct {
-	v map[string]string	// accepted values by remote addr
+	v map[int64]string	// accepted values by participant (host) ID
 	n map[string]int	// count of hosts by value accepted
-	p map[string]int64	// proposal number associated with value accepted by given host
+	p map[int64]int64	// proposal number associated with value accepted by given host
 }
 func newAccepts() Accepts {
 	return Accepts {
-		make(map[string]string),
+		make(map[int64]string),
 		make(map[string]int),
-		make(map[string]int64),
+		make(map[int64]int64),
 	}
 }
-func learn(c chan Msg, g []string) {
+func learn(c chan Msg) {
 	history := make(map[int64]Accepts)
 	fixed := make(map[int64]string)	// quorum-accepted value by instance
 	for m := range c {
@@ -497,30 +433,29 @@ func learn(c chan Msg, g []string) {
 				history[a.i] = newAccepts()
 			}
 			as := history[a.i]
-			h := m.conn.RemoteAddr().String()
-			oldv, wasThere := as.v[h]
-			if wasThere && a.p < as.p[h] {
+			oldv, wasThere := as.v[a.s]
+			if wasThere && a.p < as.p[a.s] {
 				continue	// ignore old Accept
 			}
-			as.v[h] = a.v
-			as.p[h] = a.p
+			as.v[a.s] = a.v
+			as.p[a.s] = a.p
 			if wasThere {
 				as.n[oldv] -= 1
 			}
 			as.n[a.v] += 1
-			log.Printf("learner got \"%s\" from %s, for %d accepts",
-				a.v, m.conn.RemoteAddr().String(), as.n[a.v])
-			if as.n[a.v] > len(g)/2 {
+			log.Printf("learner got \"%s\" from %d, for %d accepts",
+				a.v, a.s, as.n[a.v])
+			if as.n[a.v] > nGroup/2 {
 				fixed[a.i] = a.v
 			}
 		case "Request":
 			r := newReq(m)
 			if as, present := history[r.i]; present {
 				for v, n := range as.n {
-					if n > len(g)/2 {
+					if n > nGroup/2 {
 						s := fmt.Sprintf("Fixed %i %s",
 							r.i, v)
-						respond(m.conn, s)
+						send(s)
 						break
 					}
 				}
@@ -529,10 +464,10 @@ func learn(c chan Msg, g []string) {
 	}
 }
 
-func listen(conn *net.UDPConn) {
+func listen(conn *net.IPConn) {
 	buf := make([]byte, 9999)
 	for {
-		n, _, err := conn.ReadFromUDP(buf)
+		n, _, err := conn.ReadFromIP(buf)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -543,80 +478,65 @@ func listen(conn *net.UDPConn) {
 			continue
 		}
 		for _, c := range receivers {
-			c <- Msg{f, conn}
+			c <- Msg{f}
 		}
 	}
 }
 
-type sendMsg struct {
-	s, ra string
-}
-var sendChan chan sendMsg
-func send(s, ra string) {
-	sendChan <- sendMsg{s, ra}
-}
-func sender() {
-	conns := make(map[string] *net.UDPConn)
-	for sm := range sendChan {
-		s := sm.s
-		ra := sm.ra
-		log.Printf("sending to %s: %s", ra, s)
-		conn, ok := conns[ra]
-		if !ok {
-			log.Print("making new connection")
-			raddr, err := net.ResolveUDPAddr("udp4", ra)
-			if err != nil {
-				log.Panic(err)
-			}
-			conn, err = net.DialUDP("udp4", nil, raddr)
-			if err != nil {
-				log.Panic(err)
-			}
-			go listen(conn)
-			conns[ra] = conn
-		} else {
-			log.Print("using existing connection")
-		}
-		n, err := conn.Write([]byte(s))
-		if err != nil {
-			log.Panic(err)
-		}
-		log.Printf("sent %d bytes", n)
+var sendDest *net.IPAddr
+const groupIPProto = "ip:253"
+func send(s string) {
+	log.Printf("sending to %s: %s", sendDest.String(), s)
+	conn, err := net.DialIP(groupIPProto, nil, sendDest)
+	if err != nil {
+		log.Panic(err)
 	}
+	defer conn.Close()
+	n, err := conn.Write([]byte(s))
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Printf("sent %d bytes", n)
 }
 
 func init() {
-	flag.StringVar(&myAddr, "a", "127.0.0.1:9876",
-		"IP and port for this process")
+	flag.IntVar(&myID, "i", -1,
+		"identifier for this Paxos participant")
+	flag.IntVar(&nGroup, "n", -1,
+		"number of Paxos participants")
 }
 func main() {
+	bcastIP := "127.0.0.1"
 	flag.Parse()
-	g := group()
-
-	log.Print("upaxos started at ", myAddr)
-	defer log.Print("upaxos ending")
+	if myID == -1 || nGroup == -1 {
+		log.Panic("usage")
+	}	
+	log.Printf("upaxos id(%d) started in group of %d", myID, nGroup)
+	defer log.Print("upaxos id(%d) ending", myID)
 
 	// begin listening on my well known address
-	la, err := net.ResolveUDPAddr("udp4", myAddr)
+	la, err := net.ResolveIPAddr("udp4", bcastIP)
 	if err != nil {
 		log.Panic(err)
 	}
-	conn, err := net.ListenUDP("udp4", la)
+	conn, err := net.ListenIP(groupIPProto, la)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	sendChan = make(chan sendMsg)
-	go sender()
+	sendDest, err = net.ResolveIPAddr("ip4", "127.0.0.1")
+	if err != nil {
+		log.Panic(err)
+	}
 
 	leadc := make(chan Msg)
 	acceptc := make(chan Msg)
 	learnc := make(chan Msg)
 	mainc := make(chan Msg)
 	receivers = []chan Msg{leadc, acceptc, learnc, mainc}
-	go lead(leadc, g)
+	go lead(leadc)
 	go accept(acceptc)
-	go learn(learnc, g)
+	go learn(learnc)
 	go listen(conn)
 loop:
 	for m := range mainc {
