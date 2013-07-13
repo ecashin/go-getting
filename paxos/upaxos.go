@@ -48,7 +48,8 @@
 // ecashin@atala paxos$ sudo go run upaxos.go -n 3 -i 1 &
 // ecashin@atala paxos$ sudo go run upaxos.go -n 3 -i 2 &
 //
-// ecashin@atala ~$ echo Request 0 do stuff | sudo go run ip253-send.go
+// ecashin@atala ~$ echo Request 0 do stuff | \
+//	sudo go run iptest-send.go -a 127.0.0.1 -p 253
 //
 // DESIGN
 //
