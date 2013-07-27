@@ -62,9 +62,9 @@
 // for each such role ignore or act on the messages as appropriate.
 //
 //   leader:   handles Request, NACK, Promise, Accept;
-//   	       sends Propose, Fix, Fixed
+//   	       sends Propose, Write, Written
 //
-//   acceptor: handles Propose, Fix;
+//   acceptor: handles Propose, Write;
 //   	       sends NACK, Promise, Accept
 //
 //   learner:  notes observed quorums;
@@ -228,21 +228,21 @@ func newNack(f []string) Nack {
 	return Nack{s, i, p}
 }
 
-// Fix message format:
+// Write message format:
 // S	sender ID
 // I	consensus instance
 // P	proposal number
 // V	value
-type Fix struct {
+type Write struct {
 	s, i, p int64
 	v string
 }
-func newFix(f []string) Fix {
-	if len(f) < 4 || f[1] != "Fix" {
+func newWrite(f []string) Write {
+	if len(f) < 4 || f[1] != "Write" {
 		panic("called newAccept with bad string")
 	}
 	s, i, p := sipParse(f)	
-	return Fix{s, i, p, strings.Join(f[4:], " ")}
+	return Write{s, i, p, strings.Join(f[4:], " ")}
 }
 
 const maxReqQ = 10	// max 10 queued requests
@@ -253,7 +253,7 @@ func lead(c chan Msg) {
 	rq := list.New()	// queued requests
 	nrq := 0		// number of queued requests
 	var r *Req		// client request in progress
-	var v *string	// value to fix
+	var v *string	// value to write
 	vp := int64(-1)	// proposal number associated with v
 	npromise := 0	// number of promises received for r
 	naccepts := 0	// number of accepts received for r
@@ -307,8 +307,8 @@ func lead(c chan Msg) {
 					if v == nil {
 						v = &r.v
 					}
-					log.Print("send Fix message", v)
-					s := fmt.Sprintf("Fix %d %d %s",
+					log.Print("send Write message", v)
+					s := fmt.Sprintf("Write %d %d %s",
 						instance, lastp, v)
 					send(s)
 				}
@@ -380,13 +380,13 @@ func accept(c chan Msg) {
 				}
 			}
 			send(s)
-		case "Fix":
-			log.Print("received fix")
-			fx := newFix(m.f)
+		case "Write":
+			log.Print("received write")
+			fx := newWrite(m.f)
 			min, there := minp[fx.i]
 			s := ""
 			if there && min > fx.p {
-				log.Printf("acceptor with min %d ignoring Fix %d %d %v",
+				log.Printf("acceptor with min %d ignoring Write %d %d %v",
 					min, fx.i, fx.p, fx.v)
 				s = fmt.Sprintf("NACK %d %d", fx.i, min)
 			} else {
@@ -420,13 +420,13 @@ func newAccepts() Accepts {
 }
 func learn(c chan Msg) {
 	history := make(map[int64]Accepts)
-	fixed := make(map[int64]string)	// quorum-accepted value by instance
+	written := make(map[int64]string)	// quorum-accepted value by instance
 	for m := range c {
 		switch m.f[0] {
 		case "Accept":
 			a := newAccept(m.f)
-			if _, ok := fixed[a.i]; ok {
-				log.Printf("ignoring Accept for fixed instance %d",
+			if _, ok := written[a.i]; ok {
+				log.Printf("ignoring Accept for written instance %d",
 					a.i)
 				continue
 			}
@@ -447,14 +447,14 @@ func learn(c chan Msg) {
 			log.Printf("learner got \"%s\" from %d, for %d accepts",
 				a.v, a.s, as.n[a.v])
 			if as.n[a.v] > nGroup/2 {
-				fixed[a.i] = a.v
+				written[a.i] = a.v
 			}
 		case "Request":
 			r := newReq(m)
 			if as, present := history[r.i]; present {
 				for v, n := range as.n {
 					if n > nGroup/2 {
-						s := fmt.Sprintf("Fixed %i %s",
+						s := fmt.Sprintf("Written %i %s",
 							r.i, v)
 						send(s)
 						break
