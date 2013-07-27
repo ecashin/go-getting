@@ -525,7 +525,7 @@ func main() {
 		log.Panic(err)
 	}
 
-	sendDest, err = net.ResolveIPAddr("ip4", "127.0.0.1")
+	sendDest, err = net.ResolveIPAddr("ip4", bcastIP)
 	if err != nil {
 		log.Panic(err)
 	}
