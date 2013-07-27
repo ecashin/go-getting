@@ -339,8 +339,8 @@ func lead(c chan Msg) {
 				newr := newReq(m)
 				if r == nil {
 					r = &newr
-					s := fmt.Sprintf("Propose %d %d %s",
-						instance, lastp, r.v)
+					s := fmt.Sprintf("%d Propose %d %d %s",
+						myID, instance, lastp, r.v)
 					send(s)
 				} else if nrq < maxReqQ {
 					rq.PushBack(newr)
