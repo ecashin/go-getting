@@ -1,18 +1,37 @@
 // Practice responding to messages.
 // 
+// 
+// Start this one first:
+// 
+// paxos$ sudo go run ~/git/go-getting/paxos/iptest-rsp.go 
+// 2013/07/26 21:35:03 95717 starting
+// 2013/07/26 21:35:09 received from 127.0.0.1: Request 0 hi
+// 2013/07/26 21:35:09 sending to 127.0.0.1: 95717(Request 0 hi)
+// 2013/07/26 21:35:09 sent 19 bytes
+// 2013/07/26 21:35:10 received from 127.0.0.1: 95717(Request 0 hi)
+// 2013/07/26 21:35:10 sending to 127.0.0.1: 95717(95717(Request 0 hi))
+// 2013/07/26 21:35:10 sent 26 bytes
+// 2013/07/26 21:35:10 received from 127.0.0.1: 95722(Request 0 hi)
+// 2013/07/26 21:35:10 sending to 127.0.0.1: 95717(95722(Request 0 hi))
+// 2013/07/26 21:35:10 sent 26 bytes
+// paxos$ 
+// 
+// Next start another one:
+// 
 // ~$ sudo go run ~/git/go-getting/paxos/iptest-rsp.go 
-// 2013/07/26 21:21:25 received from 127.0.0.1: Request 0 hi
-// 2013/07/26 21:21:25 sending to 127.0.0.1: pluple Request 0 hi
-// 2013/07/26 21:21:25 sent 20 bytes
-// 2013/07/26 21:21:25 received from 127.0.0.1: pluple Request 0 hi
-// 2013/07/26 21:21:25 sending to 127.0.0.1: pluple pluple Request 0 hi
-// 2013/07/26 21:21:25 sent 27 bytes
-// 2013/07/26 21:21:25 received from 127.0.0.1: pluple pluple Request 0 hi
-// 2013/07/26 21:21:25 sending to 127.0.0.1: pluple pluple pluple Request 0 hi
-// 2013/07/26 21:21:25 sent 34 bytes
+// 2013/07/26 21:35:06 95722 starting
+// 2013/07/26 21:35:09 received from 127.0.0.1: Request 0 hi
+// 2013/07/26 21:35:09 sending to 127.0.0.1: 95722(Request 0 hi)
+// 2013/07/26 21:35:09 sent 19 bytes
+// 2013/07/26 21:35:09 received from 127.0.0.1: 95717(Request 0 hi)
+// 2013/07/26 21:35:09 sending to 127.0.0.1: 95722(95717(Request 0 hi))
+// 2013/07/26 21:35:09 sent 26 bytes
+// 2013/07/26 21:35:09 received from 127.0.0.1: 95722(Request 0 hi)
+// 2013/07/26 21:35:09 sending to 127.0.0.1: 95722(95722(Request 0 hi))
+// 2013/07/26 21:35:10 sent 26 bytes
 // ~$ 
 // 
-// Meanwhile,
+// Then give them something to talk about:
 // 
 // ~$ echo Request 0 hi | sudo go run ~/git/go-getting/paxos/iptest-send.go -a 127.0.0.1 -p 253
 // ~$ 
@@ -20,11 +39,16 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
+	"os"
+	"strings"
 )
 const groupIPProto = "ip:253"
 var addr *net.IPAddr
+var pid int
+
 func send(s string) {
 	log.Printf("sending to %s: %s", addr.String(), s)
 	conn, err := net.DialIP(groupIPProto, nil, addr)
@@ -40,6 +64,8 @@ func send(s string) {
 }
 
 func main() {
+	pid = os.Getpid()
+	log.Printf("%d starting", pid)
 	a, err := net.ResolveIPAddr("ip4", "127.0.0.1")
 	if err != nil {
 		log.Panic(err)
@@ -58,7 +84,8 @@ func main() {
 			log.Panic(err)
 		}
 		s := string(buf[:n])
+		s = strings.TrimSpace(s)
 		log.Printf("received from %s: %s", ra.String(), s)
-		send("pluple " + s)
+		send(fmt.Sprintf("%d(%s)", pid, s))
 	}
 }
