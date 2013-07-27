@@ -76,7 +76,8 @@ func main() {
 		log.Panic(err)
 	}
 	buf := make([]byte, 9999)
-	i := 3
+	i := 0
+	lim := 3
 	for {
 		n, ra, err := conn.ReadFromIP(buf)
 		if err != nil {
@@ -85,9 +86,9 @@ func main() {
 		s := string(buf[:n])
 		s = strings.TrimSpace(s)
 		log.Printf("received from %s: %s", ra.String(), s)
-		if i > 0 {
-			i--
-			go send(fmt.Sprintf("%d(%s)", pid, s))
+		if i < lim {
+			i++
+			go send(fmt.Sprintf("%d:%d(%s)", pid, i, s))
 		}
 	}
 }
