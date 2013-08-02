@@ -34,7 +34,7 @@ func (tlk *CLHLockThread) lock() {
 	tlk.pred = (*QNode)(tlk.lk.tail)
 	for !atomic.CompareAndSwapPointer(&tlk.lk.tail,
 		unsafe.Pointer(tlk.pred),
-		unsafe.Pointer(&tlk.me)) {
+		unsafe.Pointer(tlk.me)) {
 		tlk.pred = (*QNode)(tlk.lk.tail)
 	}
 	if tlk.pred != nil {
@@ -54,7 +54,7 @@ func thread(lk *CLHLock, id int, done chan bool) {
 	log.Printf("goroutine %d locking", id)
 	tlk.lock()
 	log.Printf("goroutine %d did lock", id)
-	time.Sleep(time.Duration(rand.Intn(400)) * time.Millisecond)
+	time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
 	log.Printf("goroutine %d unlocking", id)
 	tlk.unlock()
 	log.Printf("goroutine %d did unlock", id)
