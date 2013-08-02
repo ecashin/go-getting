@@ -48,25 +48,25 @@ func (tlk *CLHLockThread) unlock() {
 
 func thread(lk *CLHLock, id int, done chan bool) {
 	tlk := &CLHLockThread{lk, nil, &QNode{false}}
-	f := "%d %-10s %s"
+	f := "%-10s %d %s"
 	out := "    OUT"
-	log.Printf(f, id, "", "locking")
+	log.Printf(f, "", id, "locking")
 	tlk.lock()
-	log.Printf(f, id, "IN", "did lock")
+	log.Printf(f, "IN", id, "did lock")
 	time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
-	log.Printf(f, id, out, "unlocking")
+	log.Printf(f, out, id, "unlocking")
 	tlk.unlock()
-	log.Printf(f, id, "", "did unlock")
+	log.Printf(f, "", id, "did unlock")
 
 	time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
 
-	log.Printf(f, id, "", "locking")
+	log.Printf(f, "", id, "locking")
 	tlk.lock()
-	log.Printf(f, id, "IN", "did lock")
+	log.Printf(f, "IN", id, "did lock")
 	time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
-	log.Printf(f, id, out, "unlocking")
+	log.Printf(f, out, id, "unlocking")
 	tlk.unlock()
-	log.Printf(f, id, "", "did unlock")
+	log.Printf(f, "", id, "did unlock")
 	done <- true
 }
 
