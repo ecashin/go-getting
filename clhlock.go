@@ -63,6 +63,7 @@ func thread(lk *CLHLock, id int, done chan bool) {
 
 func main() {
 	var clhlk CLHLock
+	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	done := make(chan bool)
 	n := 5
