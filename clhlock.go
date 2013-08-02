@@ -25,27 +25,25 @@ type CLHLock struct {
 type CLHLockThread struct {
 	lk *CLHLock	// pointer to global lock state
 	pred *QNode	// previous thread in implicit queue
-	me *QNode	// "myNode" in Herlihy
+	myNode *QNode	// changes to allow safe reclaim in lang like C
 }
 
 func (tlk *CLHLockThread) lock() {
-	tlk.me.locked = true
+	tlk.myNode.locked = true
 	tlk.pred = (*QNode)(tlk.lk.tail)
 	for !atomic.CompareAndSwapPointer(&tlk.lk.tail,
 		unsafe.Pointer(tlk.pred),
-		unsafe.Pointer(tlk.me)) {
+		unsafe.Pointer(tlk.myNode)) {
 		tlk.pred = (*QNode)(tlk.lk.tail)
 	}
-	if tlk.pred != nil {
-		for tlk.pred.locked {
-			time.Sleep(time.Millisecond)
-		}
+	for tlk.pred.locked {
+		time.Sleep(time.Millisecond)
 	}
 }
 
 func (tlk *CLHLockThread) unlock() {
-	tlk.me.locked = false
-	tlk.me = tlk.pred
+	tlk.myNode.locked = false
+	tlk.myNode = tlk.pred
 }
 
 func thread(lk *CLHLock, id int, done chan bool) {
@@ -61,7 +59,7 @@ func thread(lk *CLHLock, id int, done chan bool) {
 }
 
 func main() {
-	var clhlk CLHLock
+	clhlk := CLHLock{unsafe.Pointer(&QNode{false})}
 	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	done := make(chan bool)
