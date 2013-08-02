@@ -14,7 +14,6 @@ import (
 
 type QNode struct {
 	locked bool
-	val int
 }
 
 // global state for the lock
@@ -50,7 +49,7 @@ func (tlk *CLHLockThread) unlock() {
 }
 
 func thread(lk *CLHLock, id int, done chan bool) {
-	tlk := &CLHLockThread{lk, nil, &QNode{false, 0}}
+	tlk := &CLHLockThread{lk, nil, &QNode{false}}
 	log.Printf("goroutine %d locking", id)
 	tlk.lock()
 	log.Printf("goroutine %d did lock", id)
