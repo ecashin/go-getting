@@ -1,5 +1,42 @@
 // implementation based on Herlihy's _The Art of Multiprocessor
 // Programming_, section 7.5.2.
+// 
+// Usage example:
+// 
+// ecashin@atala go-getting$ go run ~/git/go-getting/clhlock.go
+// 2013/08/02 00:32:50            1 locking
+// 2013/08/02 00:32:50 IN         1 did lock
+// 2013/08/02 00:32:50            3 locking
+// 2013/08/02 00:32:50            0 locking
+// 2013/08/02 00:32:50            2 locking
+// 2013/08/02 00:32:50     OUT    1 unlocking
+// 2013/08/02 00:32:50            1 did unlock
+// 2013/08/02 00:32:50 IN         3 did lock
+// 2013/08/02 00:32:50            1 locking
+// 2013/08/02 00:32:50     OUT    3 unlocking
+// 2013/08/02 00:32:50            3 did unlock
+// 2013/08/02 00:32:50 IN         0 did lock
+// 2013/08/02 00:32:51            3 locking
+// 2013/08/02 00:32:51     OUT    0 unlocking
+// 2013/08/02 00:32:51            0 did unlock
+// 2013/08/02 00:32:51 IN         2 did lock
+// 2013/08/02 00:32:51            0 locking
+// 2013/08/02 00:32:51     OUT    2 unlocking
+// 2013/08/02 00:32:51            2 did unlock
+// 2013/08/02 00:32:51 IN         1 did lock
+// 2013/08/02 00:32:51     OUT    1 unlocking
+// 2013/08/02 00:32:51            1 did unlock
+// 2013/08/02 00:32:51 IN         3 did lock
+// 2013/08/02 00:32:52            2 locking
+// 2013/08/02 00:32:52     OUT    3 unlocking
+// 2013/08/02 00:32:52            3 did unlock
+// 2013/08/02 00:32:52 IN         0 did lock
+// 2013/08/02 00:32:52     OUT    0 unlocking
+// 2013/08/02 00:32:52            0 did unlock
+// 2013/08/02 00:32:52 IN         2 did lock
+// 2013/08/02 00:32:52     OUT    2 unlocking
+// 2013/08/02 00:32:52            2 did unlock
+// ecashin@atala go-getting$ 
 
 package main
 
@@ -75,7 +112,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	done := make(chan bool)
-	n := 5
+	n := 4
 	for i := 0; i < n; i++ {
 		go thread(&clhlk, i, done)
 	}
