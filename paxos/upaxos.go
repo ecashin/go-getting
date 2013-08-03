@@ -474,6 +474,7 @@ func listen(conn *net.IPConn) {
 			log.Panic(err)
 		}
 		s := string(buf[:n])
+		log.Printf("did read %d bytes: %s", n, s)
 		f := strings.Fields(s)
 		if len(f) == 0 {
 			log.Print("skipping zero-field message")
