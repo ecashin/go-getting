@@ -162,6 +162,7 @@ func newPropose(f []string) Propose {
 		log.Panic("called newPropose with bad string")
 	}
 	s, i, p := sipParse(f)
+	log.Printf("Propose{ s{%d} i{%d} p{%d} }", s, i, p)
 	return Propose{s, i, p}
 }
 
