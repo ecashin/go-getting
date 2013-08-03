@@ -369,6 +369,7 @@ func accept(c chan Msg) {
 	minp := make(map[int64]int64)
 	accepted := make(map[int64]string)	// values by instance
 	for m := range c {
+		log.Printf("acceptor sees \"%s\"", strings.Join(m.f, " "))
 		switch m.f[0] {
 		case "Propose":
 			p := newPropose(m.f)
