@@ -71,6 +71,10 @@
 //             can respond to requests about previous 
 //             paxos instances (history)
 //
+// The Request message is unusual in that its first field is not an
+// identifier of a Paxos participant.  It is sent by a client, not
+// necessarily a Paxos participant.
+//
 // There's an interplay between leading and accepting.  For example,
 // if I see a new request but expect a peer to take the lead, I should
 // timeout and take the lead myself (delayed according to my ID, to
@@ -283,7 +287,22 @@ func lead(c chan Msg) {
 	for {
 		select {
 		case m := <- c:
-			switch m.f[0] {
+			if m.f[0] == "Request" {
+				newr := newReq(m)
+				if r == nil {
+					r = &newr
+					s := fmt.Sprintf("%d Propose %d %d %s",
+						myID, instance, lastp, r.v)
+					go send(s)
+				} else if nrq < maxReqQ {
+					rq.PushBack(newr)
+					nrq++
+				} else {
+					log.Print("send BUSY to client")
+				}
+				continue
+			}
+			switch m.f[1] {
 			case "Promise":
 				if r == nil {
 					log.Print("ignoring Promise--no Req in progress")
@@ -340,19 +359,6 @@ func lead(c chan Msg) {
 						}
 					}
 					nextInstance()
-				}
-			case "Request":
-				newr := newReq(m)
-				if r == nil {
-					r = &newr
-					s := fmt.Sprintf("%d Propose %d %d %s",
-						myID, instance, lastp, r.v)
-					go send(s)
-				} else if nrq < maxReqQ {
-					rq.PushBack(newr)
-					nrq++
-				} else {
-					log.Print("send BUSY to client")
 				}
 			case "NACK":
 				nk := newNack(m.f)
@@ -429,7 +435,21 @@ func learn(c chan Msg) {
 	history := make(map[int64]Accepts)
 	written := make(map[int64]string)	// quorum-accepted value by instance
 	for m := range c {
-		switch m.f[0] {
+		if m.f[0] == "Request" {
+			r := newReq(m)
+			if as, present := history[r.i]; present {
+				for v, n := range as.n {
+					if n > nGroup/2 {
+						s := fmt.Sprintf("%d Written %i %s",
+							myID, r.i, v)
+						go send(s)
+						break
+					}
+				}
+			}
+			continue
+		}
+		switch m.f[1] {
 		case "Accept":
 			a := newAccept(m.f)
 			if _, ok := written[a.i]; ok {
@@ -455,18 +475,6 @@ func learn(c chan Msg) {
 				a.v, a.s, as.n[a.v])
 			if as.n[a.v] > nGroup/2 {
 				written[a.i] = a.v
-			}
-		case "Request":
-			r := newReq(m)
-			if as, present := history[r.i]; present {
-				for v, n := range as.n {
-					if n > nGroup/2 {
-						s := fmt.Sprintf("%d Written %i %s",
-							myID, r.i, v)
-						go send(s)
-						break
-					}
-				}
 			}
 		}
 	}
