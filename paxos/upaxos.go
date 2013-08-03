@@ -97,6 +97,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -310,7 +311,7 @@ func lead(c chan Msg) {
 					log.Print("send Write message", v)
 					s := fmt.Sprintf("Write %d %d %s",
 						instance, lastp, v)
-					send(s)
+					go send(s)
 				}
 			case "Accept":
 				if r == nil {
@@ -325,7 +326,7 @@ func lead(c chan Msg) {
 				naccepts++
 				if naccepts > nGroup/2 {
 					if a.v == r.v {
-						send("OK")
+						go send("OK")
 						r = nil
 						if rq.Front() != nil {
 							e := rq.Front()
@@ -341,7 +342,7 @@ func lead(c chan Msg) {
 					r = &newr
 					s := fmt.Sprintf("%d Propose %d %d %s",
 						myID, instance, lastp, r.v)
-					send(s)
+					go send(s)
 				} else if nrq < maxReqQ {
 					rq.PushBack(newr)
 					nrq++
@@ -379,7 +380,7 @@ func accept(c chan Msg) {
 					s += " " + va
 				}
 			}
-			send(s)
+			go send(s)
 		case "Write":
 			log.Print("received write")
 			fx := newWrite(m.f)
@@ -398,7 +399,7 @@ func accept(c chan Msg) {
 					s += " " + fx.v
 				}
 			}
-			send(s)
+			go send(s)
 		}
 	}
 }
@@ -456,7 +457,7 @@ func learn(c chan Msg) {
 					if n > nGroup/2 {
 						s := fmt.Sprintf("Written %i %s",
 							r.i, v)
-						send(s)
+						go send(s)
 						break
 					}
 				}
@@ -507,6 +508,7 @@ func init() {
 		"number of Paxos participants")
 }
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	bcastIP := "127.0.0.1"
 	flag.Parse()
 	if myID == -1 || nGroup == -1 {
