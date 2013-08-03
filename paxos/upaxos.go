@@ -100,9 +100,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
+const maxSends = 100	// in case things get out of hand, stop
+
+var nSent int32
 var myID int = -1
 var nGroup int = -1
 var receivers []chan Msg
@@ -489,6 +493,11 @@ func listen(conn *net.IPConn) {
 var sendDest *net.IPAddr
 const groupIPProto = "ip:253"
 func send(s string) {
+	if nSent > maxSends {
+		log.Printf("sends capped at %d; not sending %s", maxSends, s)
+		return
+	}
+	atomic.AddInt32(&nSent, 1)
 	log.Printf("sending to %s: %s", sendDest.String(), s)
 	conn, err := net.DialIP(groupIPProto, nil, sendDest)
 	if err != nil {
