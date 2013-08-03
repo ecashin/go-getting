@@ -314,8 +314,8 @@ func lead(c chan Msg) {
 						v = &r.v
 					}
 					log.Print("send Write message", v)
-					s := fmt.Sprintf("Write %d %d %s",
-						instance, lastp, v)
+					s := fmt.Sprintf("%d Write %d %d %s",
+						myID, instance, lastp, v)
 					go send(s)
 				}
 			case "Accept":
@@ -374,14 +374,14 @@ func accept(c chan Msg) {
 		case "Propose":
 			p := newPropose(m.f)
 			min, present := minp[p.i]
-			s := ""
+			s := fmt.Sprintf("%d ", myID)
 			if !present {
 				minp[p.i] = p.p
-				s = fmt.Sprintf("Promise %d %d", p.i, p.p)
+				s += fmt.Sprintf("Promise %d %d", p.i, p.p)
 			} else if p.p < min {
-				s = fmt.Sprintf("NACK %d %d", p.i, minp)
+				s += fmt.Sprintf("NACK %d %d", p.i, minp)
 			} else {
-				s = fmt.Sprintf("Promise %d %d", p.i, p.p)
+				s += fmt.Sprintf("Promise %d %d", p.i, p.p)
 				if va, there := accepted[p.i]; there {
 					s += " " + va
 				}
@@ -391,13 +391,13 @@ func accept(c chan Msg) {
 			log.Print("received write")
 			fx := newWrite(m.f)
 			min, there := minp[fx.i]
-			s := ""
+			s := fmt.Sprintf("%d ", myID)
 			if there && min > fx.p {
 				log.Printf("acceptor with min %d ignoring Write %d %d %v",
 					min, fx.i, fx.p, fx.v)
-				s = fmt.Sprintf("NACK %d %d", fx.i, min)
+				s += fmt.Sprintf("NACK %d %d", fx.i, min)
 			} else {
-				s = fmt.Sprintf("Accept %d %d", fx.i, fx.p)
+				s += fmt.Sprintf("Accept %d %d", fx.i, fx.p)
 				if va, there := accepted[fx.i]; there {
 					s += " " + va
 				} else {
@@ -461,8 +461,8 @@ func learn(c chan Msg) {
 			if as, present := history[r.i]; present {
 				for v, n := range as.n {
 					if n > nGroup/2 {
-						s := fmt.Sprintf("Written %i %s",
-							r.i, v)
+						s := fmt.Sprintf("%d Written %i %s",
+							myID, r.i, v)
 						go send(s)
 						break
 					}
