@@ -166,7 +166,6 @@ func newPropose(f []string) Propose {
 		log.Panic("called newPropose with bad string")
 	}
 	s, i, p := sipParse(f)
-	log.Printf("Propose{ s{%d} i{%d} p{%d} }", s, i, p)
 	return Propose{s, i, p}
 }
 
@@ -317,7 +316,7 @@ func lead(c chan Msg) {
 					continue
 				} else if p.p != lastp {
 					catchup(p.i, p.p)
-					log.Printf("proposal mismatch (%d %d) try again", p.p, lastp)
+					log.Printf("leader proposed %d, ignoring promise for %d", lastp, p.p)
 					continue
 				}
 				if p.v != nil {
@@ -334,7 +333,7 @@ func lead(c chan Msg) {
 					}
 					log.Print("send Write message", v)
 					s := fmt.Sprintf("%d Write %d %d %s",
-						myID, instance, lastp, v)
+						myID, instance, lastp, *v)
 					go send(s)
 				}
 			case "Accept":
@@ -375,7 +374,6 @@ func accept(c chan Msg) {
 	minp := make(map[int64]int64)
 	accepted := make(map[int64]string)	// values by instance
 	for m := range c {
-		log.Printf("acceptor sees \"%s\"", strings.Join(m.f, " "))
 		switch m.f[1] {
 		case "Propose":
 			p := newPropose(m.f)
