@@ -343,7 +343,8 @@ func lead(c chan Msg) {
 				}
 				a := newAccept(m.f)
 				if v == nil || a.v != *v || a.i != instance || a.p != lastp {
-					log.Panic("mismatch accept")
+					log.Print("ignoring Accept not for me")
+					continue
 				}
 				log.Printf("got accept %d %d %v", a.i, a.p, a.v)
 				naccepts++
