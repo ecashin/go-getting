@@ -385,7 +385,7 @@ func accept(c chan Msg) {
 				minp[p.i] = p.p
 				s += fmt.Sprintf("Promise %d %d", p.i, p.p)
 			} else if p.p < min {
-				s += fmt.Sprintf("NACK %d %d", p.i, minp)
+				s += fmt.Sprintf("NACK %d %d", p.i, min)
 			} else {
 				s += fmt.Sprintf("Promise %d %d", p.i, p.p)
 				if va, there := accepted[p.i]; there {
@@ -395,20 +395,20 @@ func accept(c chan Msg) {
 			go send(s)
 		case "Write":
 			log.Print("received write")
-			fx := newWrite(m.f)
-			min, there := minp[fx.i]
+			wr := newWrite(m.f)
+			min, there := minp[wr.i]
 			s := fmt.Sprintf("%d ", myID)
-			if there && min > fx.p {
+			if there && min > wr.p {
 				log.Printf("acceptor with min %d ignoring Write %d %d %v",
-					min, fx.i, fx.p, fx.v)
-				s += fmt.Sprintf("NACK %d %d", fx.i, min)
+					min, wr.i, wr.p, wr.v)
+				s += fmt.Sprintf("NACK %d %d", wr.i, min)
 			} else {
-				s += fmt.Sprintf("Accept %d %d", fx.i, fx.p)
-				if va, there := accepted[fx.i]; there {
+				s += fmt.Sprintf("Accept %d %d", wr.i, wr.p)
+				if va, there := accepted[wr.i]; there {
 					s += " " + va
 				} else {
-					accepted[fx.i] = fx.v
-					s += " " + fx.v
+					accepted[wr.i] = wr.v
+					s += " " + wr.v
 				}
 			}
 			go send(s)
