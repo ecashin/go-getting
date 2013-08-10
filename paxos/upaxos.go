@@ -369,10 +369,14 @@ func lead(c chan Msg) {
 		}
 	}
 }
+type Accepted struct {
+	p int64
+	v string
+}
 func accept(c chan Msg) {
 	// per-instance record of minimum proposal number we can accept
 	minp := make(map[int64]int64)
-	accepted := make(map[int64]string)	// values by instance
+	accepted := make(map[int64]Accepted)	// values by instance
 	for m := range c {
 		switch m.f[1] {
 		case "Propose":
@@ -387,7 +391,7 @@ func accept(c chan Msg) {
 			} else {
 				s += fmt.Sprintf("Promise %d %d", p.i, p.p)
 				if va, there := accepted[p.i]; there {
-					s += " " + va
+					s += fmt.Sprintf(" %d %s", va.p, va.v)
 				}
 			}
 			go send(s)
@@ -403,10 +407,10 @@ func accept(c chan Msg) {
 			} else {
 				s += fmt.Sprintf("Accept %d %d", wr.i, wr.p)
 				if va, there := accepted[wr.i]; there {
-					s += " " + va
+					s += fmt.Sprintf(" %d %s", va.p, va.v)
 				} else {
-					accepted[wr.i] = wr.v
-					s += " " + wr.v
+					accepted[wr.i] = Accepted{wr.p, wr.v}
+					s += fmt.Sprintf(" %d %s", wr.p, wr.v)
 				}
 			}
 			go send(s)
