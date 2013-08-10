@@ -331,7 +331,6 @@ func lead(c chan Msg) {
 					if v == nil {
 						v = &r.v
 					}
-					log.Print("send Write message", v)
 					s := fmt.Sprintf("%d Write %d %d %s",
 						myID, instance, lastp, *v)
 					go send(s)
@@ -487,7 +486,7 @@ func listen(conn *net.IPConn) {
 			log.Panic(err)
 		}
 		s := string(buf[:n])
-		log.Printf("did read %d bytes: %s", n, s)
+		log.Printf("RECV %s", s)
 		f := strings.Fields(s)
 		if len(f) == 0 {
 			log.Print("skipping zero-field message")
@@ -507,17 +506,16 @@ func send(s string) {
 		return
 	}
 	atomic.AddInt32(&nSent, 1)
-	log.Printf("sending to %s: %s", sendDest.String(), s)
+	log.Printf("%20s to %s: %s", "SEND", sendDest.String(), s)
 	conn, err := net.DialIP(groupIPProto, nil, sendDest)
 	if err != nil {
 		log.Panic(err)
 	}
 	defer conn.Close()
-	n, err := conn.Write([]byte(s))
+	_, err = conn.Write([]byte(s))
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Printf("sent %d bytes", n)
 }
 
 func init() {
