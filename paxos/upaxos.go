@@ -248,7 +248,7 @@ type Write struct {
 }
 func newWrite(f []string) Write {
 	if len(f) < 4 || f[1] != "Write" {
-		panic("called newAccept with bad string")
+		panic("called newWrite with bad string")
 	}
 	s, i, p := sipParse(f)	
 	return Write{s, i, p, strings.Join(f[4:], " ")}
@@ -317,9 +317,10 @@ func lead(c chan Msg) {
 					log.Printf("instance mismatch: %d => %d",
 						oldi, p.i)
 					continue
-				} else if p.p != lastp {
-					catchup(p.i, p.p)
-					log.Printf("leader proposed %d, ignoring promise for %d", lastp, p.p)
+				} else if p.p < lastp {
+					continue	// ignore lower-numbered proposals
+				} else if p.p > lastp {
+					catchup(p.i, p.p)	// snoop: like a NACK
 					continue
 				}
 				if p.v != nil {
@@ -344,11 +345,26 @@ func lead(c chan Msg) {
 					continue
 				}
 				a := newAccept(m.f)
-				if v == nil || a.v != *v || a.i != instance || a.p != lastp {
-					log.Print("ignoring Accept not for me")
+				if v == nil {
+					log.Print("igoring Accept: v == nil")
 					continue
 				}
-				log.Printf("got accept %d %d %v", a.i, a.p, a.v)
+				if a.v != *v {
+					log.Print("ignoring Accept: a.v != *v")
+					log.Printf("a.v: %s", a.v)
+					log.Printf(" *v: %s", *v)
+					continue
+				}
+				if a.i != instance {
+					log.Print("ignoring Accept: instance mismatch")
+					continue
+				}
+				if a.p != lastp {
+					log.Print("ignoring Accept: a.p != lastp")
+					log.Printf("  a.p: %d", a.p)
+					log.Printf("lastp: %d", lastp)
+					continue
+				}
 				naccepts++
 				if naccepts > nGroup/2 {
 					if a.v == r.v {
@@ -364,8 +380,9 @@ func lead(c chan Msg) {
 				}
 			case "NACK":
 				nk := newNack(m.f)
-				log.Printf("NACK for instance: %d", nk.i)
-				catchup(nk.i, nk.p)
+				if nk.i > instance || nk.p > lastp {
+					catchup(nk.i, nk.p)
+				}
 			}
 		case <- time.After(30 * time.Second):
 			log.Print("tick tock")	// demo
