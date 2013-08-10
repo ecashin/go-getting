@@ -286,6 +286,9 @@ func lead(c chan Msg) {
 	for {
 		select {
 		case m := <- c:
+			if len(m.f) < 2 {
+				continue
+			}
 			if m.f[0] == "Request" {
 				newr := newReq(m)
 				if r == nil {
@@ -378,6 +381,9 @@ func accept(c chan Msg) {
 	minp := make(map[int64]int64)
 	accepted := make(map[int64]Accepted)	// values by instance
 	for m := range c {
+		if len(m.f) < 2 {
+			continue
+		}
 		switch m.f[1] {
 		case "Propose":
 			p := newPropose(m.f)
@@ -434,6 +440,9 @@ func learn(c chan Msg) {
 	history := make(map[int64]Accepts)
 	written := make(map[int64]string)	// quorum-accepted value by instance
 	for m := range c {
+		if len(m.f) < 2 {
+			continue
+		}
 		if m.f[0] == "Request" {
 			r := newReq(m)
 			if as, present := history[r.i]; present {
@@ -533,7 +542,7 @@ func main() {
 		log.Panic("usage")
 	}	
 	log.Printf("upaxos id(%d) started in group of %d", myID, nGroup)
-	defer log.Print("upaxos id(%d) ending", myID)
+	defer log.Printf("upaxos id(%d) ending", myID)
 
 	// begin listening on my well known address
 	la, err := net.ResolveIPAddr("udp4", bcastIP)
