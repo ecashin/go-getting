@@ -404,14 +404,12 @@ func accept(c chan Msg) {
 		switch m.f[1] {
 		case "Propose":
 			p := newPropose(m.f)
-			min, present := minp[p.i]
 			s := fmt.Sprintf("%d ", myID)
-			if !present {
-				minp[p.i] = p.p
-				s += fmt.Sprintf("Promise %d %d", p.i, p.p)
-			} else if p.p < min {
+			min, present := minp[p.i]
+			if present && p.p < min {
 				s += fmt.Sprintf("NACK %d %d", p.i, min)
 			} else {
+				minp[p.i] = p.p
 				s += fmt.Sprintf("Promise %d", p.i)
 				if va, there := accepted[p.i]; there {
 					s += fmt.Sprintf(" %d %s", va.p, va.v)
@@ -421,7 +419,6 @@ func accept(c chan Msg) {
 			}
 			go send(s)
 		case "Write":
-			log.Print("received write")
 			wr := newWrite(m.f)
 			min, there := minp[wr.i]
 			s := fmt.Sprintf("%d ", myID)
