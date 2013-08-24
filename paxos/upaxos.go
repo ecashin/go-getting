@@ -410,11 +410,9 @@ func accept(c chan Msg) {
 				s += fmt.Sprintf("NACK %d %d", p.i, min)
 			} else {
 				minp[p.i] = p.p
-				s += fmt.Sprintf("Promise %d", p.i)
+				s += fmt.Sprintf("Promise %d %d", p.i, p.p)
 				if va, there := accepted[p.i]; there {
 					s += fmt.Sprintf(" %d %s", va.p, va.v)
-				} else {
-					s += fmt.Sprintf(" %d", p.p)
 				}
 			}
 			go send(s)
