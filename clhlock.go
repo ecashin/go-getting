@@ -37,6 +37,10 @@
 // 2013/08/02 00:32:52     OUT    2 unlocking
 // 2013/08/02 00:32:52            2 did unlock
 // ecashin@atala go-getting$ 
+// 
+// I realize that in Go style you just use channels for
+// concurrency control.  This is just an exercise to learn
+// about the way this scalable lock works.
 
 package main
 

@@ -67,4 +67,10 @@ l77rw1.go - concurrent multiple readers / single writer
 
   based on Leslie Lamport's 1977 paper, "Concurrent Reading and Writing"
 
+clhlock.go - Travis Craig and Magnussen, Landin, Hagersten lock demo
+
 paxos/bpaxos.go - basic Paxos implementation
+
+paxos/upaxos.go - IP-based unreliable broadcast Paxos demo
+
+paxos/iptest-send.go - Send to IP broadcast
