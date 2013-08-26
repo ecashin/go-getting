@@ -99,8 +99,10 @@ import (
 	"container/list"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -544,6 +546,17 @@ func send(s string) {
 	}
 }
 
+// This is the recovery log used for persistence of promises and
+// accepts.
+func logfile(id int) (io.Reader, *log.Logger) {
+	s := fmt.Sprintf("upaxos-%d.log", id)
+	f, err := os.OpenFile(s, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		log.Panic(err)
+	}
+	return f, log.New(f, fmt.Sprintf("%d: ", id), 0)
+}
+
 func init() {
 	flag.IntVar(&myID, "i", -1,
 		"identifier for this Paxos participant")
@@ -559,6 +572,13 @@ func main() {
 	}	
 	log.Printf("upaxos id(%d) started in group of %d", myID, nGroup)
 	defer log.Printf("upaxos id(%d) ending", myID)
+
+	_, lf := logfile(myID)
+	lf.Print("Hi, Mom.")
+	// XXX TODO: Read in Promises and Accepts from log,
+	//	store in data structures,
+	//	provide data structures to accept and learn functions
+	//	as "priming."
 
 	// begin listening on my well known address
 	la, err := net.ResolveIPAddr("udp4", bcastIP)
