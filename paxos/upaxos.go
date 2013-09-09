@@ -10,9 +10,9 @@
 //
 //   * leaders back off deterministically to enhance liveness
 //
-// Features to do next:
-//
 //   * persistent storage needed for recovery ("logs")
+//
+// Features to do next:
 //
 //   * recovery - participant starts up, reads logs, and participates
 //
@@ -97,6 +97,7 @@ package main
 
 import (
 	"container/list"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -399,7 +400,22 @@ type Accepted struct {
 	p int64
 	v string
 }
-func accept(c chan Msg) {
+type AcceptedLogEntry struct {
+	i int64	// instance number
+	a Accepted
+}
+func logAccept(lf *log.Logger, instance int64, a Accepted) {
+	ale := AcceptedLogEntry {
+		i: instance,
+		a: a,
+	}
+	js, err := json.Marshal(ale)
+	if err != nil {
+		log.Panic(err)
+	}
+	lf.Printf("accepted: %s", string(js))
+}
+func accept(c chan Msg, lf *log.Logger) {
 	// per-instance record of minimum proposal number we can accept
 	minp := make(map[int64]int64)
 	accepted := make(map[int64]Accepted)	// values by instance
@@ -432,7 +448,9 @@ func accept(c chan Msg) {
 				s += fmt.Sprintf("NACK %d %d", wr.i, min)
 			} else {
 				s += fmt.Sprintf("Accept %d %d %s", wr.i, wr.p, wr.v)
-				accepted[wr.i] = Accepted{wr.p, wr.v}
+				a := Accepted{wr.p, wr.v}
+				logAccept(lf, wr.i, a)
+				accepted[wr.i] = a
 			}
 			go send(s)
 		}
@@ -454,7 +472,7 @@ func newAccepts() Accepts {
 		make(map[int64]int64),
 	}
 }
-func learn(c chan Msg) {
+func learn(c chan Msg, lf *log.Logger) {
 	history := make(map[int64]Accepts)
 	written := make(map[int64]string)	// quorum-accepted value by instance
 	for m := range c {
@@ -547,7 +565,7 @@ func send(s string) {
 }
 
 // This is the recovery log used for persistence of promises and
-// accepts.
+// accepts.  It resides in the current working directory.
 func logfile(id int) (io.Reader, *log.Logger) {
 	s := fmt.Sprintf("upaxos-%d.log", id)
 	f, err := os.OpenFile(s, os.O_RDWR|os.O_CREATE, 0666)
@@ -574,7 +592,7 @@ func main() {
 	defer log.Printf("upaxos id(%d) ending", myID)
 
 	_, lf := logfile(myID)
-	lf.Print("Hi, Mom.")
+	lf.Printf("startup: %d", myID)
 	// XXX TODO: Read in Promises and Accepts from log,
 	//	store in data structures,
 	//	provide data structures to accept and learn functions
@@ -601,8 +619,8 @@ func main() {
 	mainc := make(chan Msg)
 	receivers = []chan Msg{leadc, acceptc, learnc, mainc}
 	go lead(leadc)
-	go accept(acceptc)
-	go learn(learnc)
+	go accept(acceptc, lf)
+	go learn(learnc, lf)
 	go listen(conn)
 loop:
 	for m := range mainc {
