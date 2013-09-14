@@ -585,7 +585,7 @@ func main() {
 	//	as "priming."
 
 	// begin listening on my well known address
-	la, err := net.ResolveIPAddr("udp4", bcastIP)
+	la, err := net.ResolveIPAddr("ip4", bcastIP)
 	if err != nil {
 		log.Panic(err)
 	}
