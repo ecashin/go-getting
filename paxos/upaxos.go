@@ -185,6 +185,9 @@ type Promise struct {
 	vp int64	// proposal number associated with the accepted value
 	v *string	// the previously accepted value, nil if none accepted
 }
+func logWritePromise(lf *log.Logger, i, p int64) {
+	lf.Printf("promise %d %d", i, p)
+}
 func newPromise(f []string) Promise {
 	if len(f) < 4 || f[1] != "Promise" {
 		log.Panic("called newPromise with bad string")
@@ -399,7 +402,7 @@ type Accepted struct {
 	p int64
 	v string
 }
-func accept(c chan Msg) {
+func accept(c chan Msg, lf *log.Logger) {
 	// per-instance record of minimum proposal number we can accept
 	minp := make(map[int64]int64)
 	accepted := make(map[int64]Accepted)	// values by instance
@@ -420,6 +423,7 @@ func accept(c chan Msg) {
 				if va, there := accepted[p.i]; there {
 					s += fmt.Sprintf(" %d %s", va.p, va.v)
 				}
+				logWritePromise(lf, p.i, p.p)
 			}
 			go send(s)
 		case "Write":
@@ -574,7 +578,7 @@ func main() {
 	defer log.Printf("upaxos id(%d) ending", myID)
 
 	_, lf := logfile(myID)
-	lf.Print("Hi, Mom.")
+	lf.Printf("starting %d", myID)
 	// XXX TODO: Read in Promises and Accepts from log,
 	//	store in data structures,
 	//	provide data structures to accept and learn functions
@@ -601,7 +605,7 @@ func main() {
 	mainc := make(chan Msg)
 	receivers = []chan Msg{leadc, acceptc, learnc, mainc}
 	go lead(leadc)
-	go accept(acceptc)
+	go accept(acceptc, lf)
 	go learn(learnc)
 	go listen(conn)
 loop:
