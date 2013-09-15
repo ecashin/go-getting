@@ -475,15 +475,10 @@ func learn(c chan Msg, lf *log.Logger, ll []loggedLearn) {
 		}
 		if m.f[0] == "Request" {
 			r := newReq(m)
-			if as, present := history[r.i]; present {
-				for v, n := range as.n {
-					if n > nGroup/2 {
-						s := fmt.Sprintf("%d OK %d %s",
-							myID, r.i, v)
-						go send(s)
-						break
-					}
-				}
+			if v, present := written[r.i]; present {
+				s := fmt.Sprintf("%d OK %d %s",
+					myID, r.i, v)
+				go send(s)
 			}
 			continue
 		}
