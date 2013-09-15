@@ -469,6 +469,12 @@ func newAccepts() Accepts {
 func learn(c chan Msg, lf *log.Logger, ll []loggedLearn) {
 	history := make(map[int64]Accepts)
 	written := make(map[int64]string)	// quorum-accepted value by instance
+
+	// prime written with info recovered from log
+	for _, rec := range ll {
+		written[rec.i] = rec.v
+	}
+
 	for m := range c {
 		if len(m.f) < 2 {
 			continue
@@ -584,6 +590,7 @@ func loadLogData(lf io.Reader) (p []loggedPromise, a []loggedAccept, lrn []logge
 	ln, err := r.ReadString('\n')
 	for err == nil {
 		f := strings.Fields(ln)
+		f = f[1:]	// ignore myID prefix
 		switch f[0] {
 		case "promise":
 			p = append(p, loggedPromise {
