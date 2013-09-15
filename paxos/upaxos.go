@@ -462,7 +462,10 @@ func newAccepts() Accepts {
 		make(map[int64]int64),
 	}
 }
-func learn(c chan Msg) {
+func logWriteLearned(lf *log.Logger, i int64, v string) {
+	lf.Printf("learn %d %s", i, v)
+}
+func learn(c chan Msg, lf *log.Logger) {
 	history := make(map[int64]Accepts)
 	written := make(map[int64]string)	// quorum-accepted value by instance
 	for m := range c {
@@ -508,6 +511,7 @@ func learn(c chan Msg) {
 			log.Printf("learner got \"%s\" from %d, for %d accepts",
 				a.v, a.s, as.n[a.v])
 			if as.n[a.v] > nGroup/2 {
+				logWriteLearned(lf, a.i, a.v)
 				written[a.i] = a.v
 			}
 		}
@@ -610,7 +614,7 @@ func main() {
 	receivers = []chan Msg{leadc, acceptc, learnc, mainc}
 	go lead(leadc)
 	go accept(acceptc, lf)
-	go learn(learnc)
+	go learn(learnc, lf)
 	go listen(conn)
 loop:
 	for m := range mainc {
