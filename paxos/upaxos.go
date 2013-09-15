@@ -96,6 +96,7 @@
 package main
 
 import (
+	"bufio"
 	"container/list"
 	"flag"
 	"fmt"
@@ -399,7 +400,7 @@ type Accepted struct {
 	p int64
 	v string
 }
-func accept(c chan Msg, lf *log.Logger) {
+func accept(c chan Msg, lf *log.Logger, lp []loggedPromise, la []loggedAccept) {
 	// per-instance record of minimum proposal number we can accept
 	minp := make(map[int64]int64)
 	accepted := make(map[int64]Accepted)	// values by instance
@@ -456,7 +457,7 @@ func newAccepts() Accepts {
 		make(map[int64]int64),
 	}
 }
-func learn(c chan Msg, lf *log.Logger) {
+func learn(c chan Msg, lf *log.Logger, ll []loggedLearn) {
 	history := make(map[int64]Accepts)
 	written := make(map[int64]string)	// quorum-accepted value by instance
 	for m := range c {
@@ -560,6 +561,48 @@ func logfile(id int) (io.Reader, *log.Logger) {
 	return f, log.New(f, fmt.Sprintf("%d: ", id), 0)
 }
 
+type loggedPromise struct {
+	i, p int64
+}
+type loggedAccept struct {
+	i, p int64
+	v string
+}
+type loggedLearn struct {
+	i int64
+	v string
+}
+func loadLogData(lf io.Reader) (p []loggedPromise, a []loggedAccept, lrn []loggedLearn) {
+	p = []loggedPromise{}
+	a = []loggedAccept{}
+	lrn = []loggedLearn{}
+	r := bufio.NewReader(lf)
+	ln, err := r.ReadString('\n')
+	for err == nil {
+		f := strings.Fields(ln)
+		switch f[0] {
+		case "promise":
+			p = append(p, loggedPromise {
+				mustStrtoll(f[1]),
+				mustStrtoll(f[2]),
+			})
+		case "accept":
+			a = append(a, loggedAccept {
+				mustStrtoll(f[1]),
+				mustStrtoll(f[2]),
+				f[3],
+			})
+		case "learn":
+			lrn = append(lrn, loggedLearn {
+				mustStrtoll(f[1]),
+				f[2],
+			})
+		}
+		ln, err = r.ReadString('\n')
+	}
+	return
+}
+
 func init() {
 	flag.IntVar(&myID, "i", -1,
 		"identifier for this Paxos participant")
@@ -576,12 +619,9 @@ func main() {
 	log.Printf("upaxos id(%d) started in group of %d", myID, nGroup)
 	defer log.Printf("upaxos id(%d) ending", myID)
 
-	_, lf := logfile(myID)
-	lf.Printf("starting %d", myID)
-	// XXX TODO: Read in Promises and Accepts from log,
-	//	store in data structures,
-	//	provide data structures to accept and learn functions
-	//	as "priming."
+	lfr, lfw := logfile(myID)
+	promises, accepts, learnings := loadLogData(lfr)
+	lfw.Printf("starting %d", myID)
 
 	// begin listening on my well known address
 	la, err := net.ResolveIPAddr("ip4", bcastIP)
@@ -604,8 +644,8 @@ func main() {
 	mainc := make(chan Msg)
 	receivers = []chan Msg{leadc, acceptc, learnc, mainc}
 	go lead(leadc)
-	go accept(acceptc, lf)
-	go learn(learnc, lf)
+	go accept(acceptc, lfw, promises, accepts)
+	go learn(learnc, lfw, learnings)
 	go listen(conn)
 loop:
 	for m := range mainc {
