@@ -185,9 +185,6 @@ type Promise struct {
 	vp int64	// proposal number associated with the accepted value
 	v *string	// the previously accepted value, nil if none accepted
 }
-func logWritePromise(lf *log.Logger, i, p int64) {
-	lf.Printf("promise %d %d", i, p)
-}
 func newPromise(f []string) Promise {
 	if len(f) < 4 || f[1] != "Promise" {
 		log.Panic("called newPromise with bad string")
@@ -214,9 +211,6 @@ func newPromise(f []string) Promise {
 type Accept struct {
 	s, i, p int64
 	v string
-}
-func logWriteAccept(lf *log.Logger, i, p int64, v string) {
-	lf.Printf("accept %d %d %s", i, p, v)
 }
 func newAccept(f []string) Accept {
 	if len(f) < 4 || f[1] != "Accept" {
@@ -426,7 +420,7 @@ func accept(c chan Msg, lf *log.Logger) {
 				if va, there := accepted[p.i]; there {
 					s += fmt.Sprintf(" %d %s", va.p, va.v)
 				}
-				logWritePromise(lf, p.i, p.p)
+				lf.Printf("promise %d %d", p.i, p.p)
 			}
 			go send(s)
 		case "Write":
@@ -439,7 +433,7 @@ func accept(c chan Msg, lf *log.Logger) {
 				s += fmt.Sprintf("NACK %d %d", wr.i, min)
 			} else {
 				s += fmt.Sprintf("Accept %d %d %s", wr.i, wr.p, wr.v)
-				logWriteAccept(lf, wr.i, wr.p, wr.v)
+				lf.Printf("accept %d %d %s", wr.i, wr.p, wr.v)
 				accepted[wr.i] = Accepted{wr.p, wr.v}
 			}
 			go send(s)
@@ -461,9 +455,6 @@ func newAccepts() Accepts {
 		make(map[string]int),
 		make(map[int64]int64),
 	}
-}
-func logWriteLearned(lf *log.Logger, i int64, v string) {
-	lf.Printf("learn %d %s", i, v)
 }
 func learn(c chan Msg, lf *log.Logger) {
 	history := make(map[int64]Accepts)
@@ -511,7 +502,7 @@ func learn(c chan Msg, lf *log.Logger) {
 			log.Printf("learner got \"%s\" from %d, for %d accepts",
 				a.v, a.s, as.n[a.v])
 			if as.n[a.v] > nGroup/2 {
-				logWriteLearned(lf, a.i, a.v)
+				lf.Printf("learn %d %s", a.i, a.v)
 				written[a.i] = a.v
 			}
 		}
