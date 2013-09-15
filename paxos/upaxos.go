@@ -215,6 +215,9 @@ type Accept struct {
 	s, i, p int64
 	v string
 }
+func logWriteAccept(lf *log.Logger, i, p int64, v string) {
+	lf.Printf("accept %d %d %s", i, p, v)
+}
 func newAccept(f []string) Accept {
 	if len(f) < 4 || f[1] != "Accept" {
 		panic("called newAccept with bad string")
@@ -436,6 +439,7 @@ func accept(c chan Msg, lf *log.Logger) {
 				s += fmt.Sprintf("NACK %d %d", wr.i, min)
 			} else {
 				s += fmt.Sprintf("Accept %d %d %s", wr.i, wr.p, wr.v)
+				logWriteAccept(lf, wr.i, wr.p, wr.v)
 				accepted[wr.i] = Accepted{wr.p, wr.v}
 			}
 			go send(s)
