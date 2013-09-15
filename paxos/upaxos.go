@@ -404,6 +404,15 @@ func accept(c chan Msg, lf *log.Logger, lp []loggedPromise, la []loggedAccept) {
 	// per-instance record of minimum proposal number we can accept
 	minp := make(map[int64]int64)
 	accepted := make(map[int64]Accepted)	// values by instance
+
+	// first, recover info from logged operations
+	for _, rec := range lp {
+		minp[rec.i] = rec.p
+	}
+	for _, rec := range la {
+		accepted[rec.i] = Accepted{rec.p, rec.v}
+	}
+
 	for m := range c {
 		if len(m.f) < 2 {
 			continue
