@@ -1,6 +1,12 @@
 // test IRC client uses https://github.com/husio/go-irc.git
 // based on examples/client.go in go-irc
 //
+// This was a cute idea: Create an IRC "bot" that knows how
+//   Paxos is supposed to work; then allow humans to execute
+//   the algorithm in an IRC channel, with the bot acting as
+//   moderator.  In the end, cuteness wasn't enough to justify
+//   the effort, and I switched to working on upaxos.go.
+//
 // GOPATH="$HOME"/git/go-irc go run pircxos.go
 //
 // G P set V		leader asks acceptors to accept value
