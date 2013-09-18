@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const maxSends = 50	// in case things get out of hand, stop
+const maxSends = 50 // in case things get out of hand, stop
 
 var nSent int32
 var myID int = -1
@@ -26,7 +26,7 @@ var nGroup int = -1
 var receivers []chan Msg
 
 type Msg struct {
-	f []string	// whitespace-separated message fields
+	f []string // whitespace-separated message fields
 }
 
 func mustStrtoll(s string) (n int64) {
@@ -49,9 +49,10 @@ func sipParse(f []string) (s, i, p int64) {
 // I	consensus instance (zero for new state)
 // V	the value the client wants to set (ignored for lookup)
 type Req struct {
-	i int64	// 0 for new instance
+	i int64  // 0 for new instance
 	v string // ignored for history query
 }
+
 func newReq(m Msg) Req {
 	if len(m.f) < 2 || m.f[0] != "Request" {
 		panic("called newReq with bad string")
@@ -71,6 +72,7 @@ func newReq(m Msg) Req {
 type Propose struct {
 	s, i, p int64
 }
+
 func newPropose(f []string) Propose {
 	if len(f) < 4 || f[1] != "Propose" {
 		log.Panic("called newPropose with bad string")
@@ -90,9 +92,10 @@ type Promise struct {
 	s, i, p int64
 
 	// optional fields, absent if no prior accepted value
-	vp int64	// proposal number associated with the accepted value
-	v *string	// the previously accepted value, nil if none accepted
+	vp int64   // proposal number associated with the accepted value
+	v  *string // the previously accepted value, nil if none accepted
 }
+
 func newPromise(f []string) Promise {
 	if len(f) < 4 || f[1] != "Promise" {
 		log.Panic("called newPromise with bad string")
@@ -118,8 +121,9 @@ func newPromise(f []string) Promise {
 // V	value accepted
 type Accept struct {
 	s, i, p int64
-	v string
+	v       string
 }
+
 func newAccept(f []string) Accept {
 	if len(f) < 4 || f[1] != "Accept" {
 		panic("called newAccept with bad string")
@@ -139,6 +143,7 @@ func newAccept(f []string) Accept {
 type Nack struct {
 	s, i, p int64
 }
+
 func newNack(f []string) Nack {
 	if len(f) != 4 || f[1] != "NACK" {
 		panic("called newNack on bad string")
@@ -154,28 +159,29 @@ func newNack(f []string) Nack {
 // V	value
 type Write struct {
 	s, i, p int64
-	v string
+	v       string
 }
+
 func newWrite(f []string) Write {
 	if len(f) < 4 || f[1] != "Write" {
 		panic("called newWrite with bad string")
 	}
-	s, i, p := sipParse(f)	
+	s, i, p := sipParse(f)
 	return Write{s, i, p, strings.Join(f[4:], " ")}
 }
 
-const maxReqQ = 10	// max 10 queued requests
+const maxReqQ = 10 // max 10 queued requests
 
 func lead(c chan Msg) {
-	instance := int64(1)	// consensus instance leader is trying to use
-	lastp := int64(myID)	// proposal number last sent
-	rq := list.New()	// queued requests
-	nrq := 0		// number of queued requests
-	var r *Req		// client request in progress
-	var v *string	// value to write
-	vp := int64(-1)	// proposal number associated with v
-	npromise := 0	// number of promises received for r
-	naccepts := 0	// number of accepts received for r
+	instance := int64(1) // consensus instance leader is trying to use
+	lastp := int64(myID) // proposal number last sent
+	rq := list.New()     // queued requests
+	nrq := 0             // number of queued requests
+	var r *Req           // client request in progress
+	var v *string        // value to write
+	vp := int64(-1)      // proposal number associated with v
+	npromise := 0        // number of promises received for r
+	naccepts := 0        // number of accepts received for r
 	catchup := func(i, p int64) {
 		if i != instance {
 			v = nil
@@ -187,20 +193,20 @@ func lead(c chan Msg) {
 		n := int64(nGroup)
 		p /= n
 		p++
-		lastp = p * n + int64(myID)
+		lastp = p*n + int64(myID)
 	}
 	nextInstance := func() {
 		catchup(instance+1, 0)
 	}
 	propose := func() {
 		s := fmt.Sprintf("%d Propose %d %d %s",
-				myID, instance, lastp, r.v)
+			myID, instance, lastp, r.v)
 		go send(s)
 	}
 
 	for {
 		select {
-		case m := <- c:
+		case m := <-c:
 			if len(m.f) < 2 {
 				continue
 			}
@@ -235,9 +241,9 @@ func lead(c chan Msg) {
 						oldi, p.i)
 					continue
 				} else if p.p < lastp {
-					continue	// ignore lower-numbered proposals
+					continue // ignore lower-numbered proposals
 				} else if p.p > lastp {
-					catchup(p.i, p.p)	// snoop: like a NACK
+					catchup(p.i, p.p) // snoop: like a NACK
 					continue
 				}
 				if p.v != nil {
@@ -306,19 +312,21 @@ func lead(c chan Msg) {
 					}
 				}
 			}
-		case <- time.After(30 * time.Second):
-			log.Print("tick tock")	// XXXdemo
+		case <-time.After(30 * time.Second):
+			log.Print("tick tock") // XXXdemo
 		}
 	}
 }
+
 type Accepted struct {
 	p int64
 	v string
 }
+
 func accept(c chan Msg, lf *log.Logger, lp []loggedPromise, la []loggedAccept) {
 	// per-instance record of minimum proposal number we can accept
 	minp := make(map[int64]int64)
-	accepted := make(map[int64]Accepted)	// values by instance
+	accepted := make(map[int64]Accepted) // values by instance
 
 	// first, recover info from logged operations
 	for _, rec := range lp {
@@ -370,12 +378,13 @@ func accept(c chan Msg, lf *log.Logger, lp []loggedPromise, la []loggedAccept) {
 // Storing the proposal number protects against out-of-order delivery
 // of accept messages by the network.
 type Accepts struct {
-	v map[int64]string	// accepted values by participant (host) ID
-	n map[string]int	// count of hosts by value accepted
-	p map[int64]int64	// proposal number associated with value accepted by given host
+	v map[int64]string // accepted values by participant (host) ID
+	n map[string]int   // count of hosts by value accepted
+	p map[int64]int64  // proposal number associated with value accepted by given host
 }
+
 func newAccepts() Accepts {
-	return Accepts {
+	return Accepts{
 		make(map[int64]string),
 		make(map[string]int),
 		make(map[int64]int64),
@@ -383,7 +392,7 @@ func newAccepts() Accepts {
 }
 func learn(c chan Msg, lf *log.Logger, ll []loggedLearn) {
 	history := make(map[int64]Accepts)
-	written := make(map[int64]string)	// quorum-accepted value by instance
+	written := make(map[int64]string) // quorum-accepted value by instance
 
 	// prime written with info recovered from log
 	for _, rec := range ll {
@@ -418,7 +427,7 @@ func learn(c chan Msg, lf *log.Logger, ll []loggedLearn) {
 			as := history[a.i]
 			oldv, wasThere := as.v[a.s]
 			if wasThere && a.p < as.p[a.s] {
-				continue	// ignore old Accept
+				continue // ignore old Accept
 			}
 			as.v[a.s] = a.v
 			as.p[a.s] = a.p
@@ -457,7 +466,9 @@ func listen(conn *net.IPConn) {
 }
 
 var sendDest *net.IPAddr
+
 const groupIPProto = "ip:253"
+
 func send(s string) {
 	if nSent > maxSends {
 		log.Printf("sends capped at %d; not sending %s", maxSends, s)
@@ -492,12 +503,13 @@ type loggedPromise struct {
 }
 type loggedAccept struct {
 	i, p int64
-	v string
+	v    string
 }
 type loggedLearn struct {
 	i int64
 	v string
 }
+
 func loadLogData(lf io.Reader) (p []loggedPromise, a []loggedAccept, lrn []loggedLearn) {
 	p = []loggedPromise{}
 	a = []loggedAccept{}
@@ -506,21 +518,21 @@ func loadLogData(lf io.Reader) (p []loggedPromise, a []loggedAccept, lrn []logge
 	ln, err := r.ReadString('\n')
 	for err == nil {
 		f := strings.Fields(ln)
-		f = f[1:]	// ignore myID prefix
+		f = f[1:] // ignore myID prefix
 		switch f[0] {
 		case "promise":
-			p = append(p, loggedPromise {
+			p = append(p, loggedPromise{
 				mustStrtoll(f[1]),
 				mustStrtoll(f[2]),
 			})
 		case "accept":
-			a = append(a, loggedAccept {
+			a = append(a, loggedAccept{
 				mustStrtoll(f[1]),
 				mustStrtoll(f[2]),
 				f[3],
 			})
 		case "learn":
-			lrn = append(lrn, loggedLearn {
+			lrn = append(lrn, loggedLearn{
 				mustStrtoll(f[1]),
 				f[2],
 			})
@@ -542,7 +554,7 @@ func main() {
 	flag.Parse()
 	if myID == -1 || nGroup == -1 {
 		log.Panic("usage")
-	}	
+	}
 	log.Printf("upaxos id(%d) started in group of %d", myID, nGroup)
 	defer log.Printf("upaxos id(%d) ending", myID)
 
@@ -578,8 +590,10 @@ loop:
 	for m := range mainc {
 		if len(m.f) > 0 {
 			switch m.f[0] {
-			case "quit": fallthrough
-			case "exit": fallthrough
+			case "quit":
+				fallthrough
+			case "exit":
+				fallthrough
 			case "bye":
 				log.Print("exiting")
 				break loop
