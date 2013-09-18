@@ -12,6 +12,7 @@ import (
 )
 
 const basePort = 4568
+
 var amTwo bool
 
 func listen(c chan string, conn *net.UDPConn, label string) {
@@ -21,7 +22,7 @@ func listen(c chan string, conn *net.UDPConn, label string) {
 		n, _, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			log.Print(err)
-			time.Sleep(3*time.Second)
+			time.Sleep(3 * time.Second)
 			continue
 		}
 		s := string(buf[:n])
@@ -55,7 +56,7 @@ func main() {
 	}
 	incoming := make(chan string)
 	go listenPub(incoming, fmt.Sprintf("127.0.0.1:%d", lPubPort))
-	time.Sleep(3*time.Second)
+	time.Sleep(3 * time.Second)
 	ra := fmt.Sprintf("127.0.0.1:%d", rPubPort)
 	var conn *net.UDPConn
 	for {
@@ -63,20 +64,20 @@ func main() {
 		raddr, err := net.ResolveUDPAddr("udp4", ra)
 		if err != nil {
 			log.Print(err)
-			time.Sleep(3*time.Second)
+			time.Sleep(3 * time.Second)
 			continue
 		}
 		conn, err = net.DialUDP("udp4", nil, raddr)
 		if err != nil {
 			log.Print(err)
-			time.Sleep(3*time.Second)
+			time.Sleep(3 * time.Second)
 			continue
 		}
 		msg := fmt.Sprintf("Hello from %d", lPubPort)
 		_, err = conn.Write([]byte(msg))
 		if err != nil {
 			log.Print(err)
-			time.Sleep(3*time.Second)
+			time.Sleep(3 * time.Second)
 			continue
 		}
 		break

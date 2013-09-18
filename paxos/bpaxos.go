@@ -16,22 +16,22 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
-	"flag"
 )
 
 const NMaxProposers = 10
 
 type proposer struct {
-	name string
-	num int64
+	name    string
+	num     int64
 	success bool
 }
 
 type acceptor struct {
 	biggest int64
-	val value
+	val     value
 }
 
 type value *string
@@ -44,7 +44,7 @@ type proposal struct {
 type proposalMsg struct {
 	proposal
 	sender string
-	c chan proposal
+	c      chan proposal
 }
 
 func (p *proposer) exceed(n int64) {
@@ -94,7 +94,7 @@ func (p *proposer) propose(n int, acceptors chan proposalMsg, exit chan bool) {
 		log.Printf("%s aborting after proposing number %d\n",
 			p.name, orig_pnum)
 		p.success = false
-		return		
+		return
 	}
 	if v == nil {
 		s := fmt.Sprintf("v%d my name is %s", p.num, p.name)
@@ -135,7 +135,7 @@ func (a *acceptor) show(cmd proposalMsg) {
 	}
 	// XXX changing the line below to "log.Printf" reveals deadlock
 	fmt.Printf("acceptor saw %s %s; responding with biggest:%d val:%v\n",
-		 cmd.sender, t, a.biggest, a.val)
+		cmd.sender, t, a.biggest, a.val)
 }
 
 func (a *acceptor) handleCmd(cmd proposalMsg) {
@@ -171,11 +171,12 @@ func (a *acceptor) handleCmd(cmd proposalMsg) {
 func (a *acceptor) accept(proposers chan proposalMsg) {
 	for cmd := range proposers {
 		go a.handleCmd(cmd)
-	}	
+	}
 }
 
 var nProds int
 var nAccs int
+
 func init() {
 	flag.IntVar(&nProds, "p", 1, "specify number of proposers")
 	flag.IntVar(&nAccs, "a", 3, "specify number of acceptors")
@@ -183,7 +184,7 @@ func init() {
 func main() {
 	flag.Parse()
 	fmt.Println(nProds, nAccs)
-	pexitc := make(chan bool)	// for the proposers to signal exit
+	pexitc := make(chan bool) // for the proposers to signal exit
 	p := make([]*proposer, nProds)
 	for i := 0; i < nProds; i++ {
 		p[i] = &proposer{fmt.Sprintf("proposer%d", i), int64(i), false}

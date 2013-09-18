@@ -1,9 +1,9 @@
 // Practice responding to messages.
-// 
-// 
+//
+//
 // Start this one first:
-// 
-// paxos$ sudo go run ~/git/go-getting/paxos/iptest-rsp.go 
+//
+// paxos$ sudo go run ~/git/go-getting/paxos/iptest-rsp.go
 // 2013/07/26 21:35:03 95717 starting
 // 2013/07/26 21:35:09 received from 127.0.0.1: Request 0 hi
 // 2013/07/26 21:35:09 sending to 127.0.0.1: 95717(Request 0 hi)
@@ -14,11 +14,11 @@
 // 2013/07/26 21:35:10 received from 127.0.0.1: 95722(Request 0 hi)
 // 2013/07/26 21:35:10 sending to 127.0.0.1: 95717(95722(Request 0 hi))
 // 2013/07/26 21:35:10 sent 26 bytes
-// paxos$ 
-// 
+// paxos$
+//
 // Next start another one:
-// 
-// ~$ sudo go run ~/git/go-getting/paxos/iptest-rsp.go 
+//
+// ~$ sudo go run ~/git/go-getting/paxos/iptest-rsp.go
 // 2013/07/26 21:35:06 95722 starting
 // 2013/07/26 21:35:09 received from 127.0.0.1: Request 0 hi
 // 2013/07/26 21:35:09 sending to 127.0.0.1: 95722(Request 0 hi)
@@ -29,12 +29,12 @@
 // 2013/07/26 21:35:09 received from 127.0.0.1: 95722(Request 0 hi)
 // 2013/07/26 21:35:09 sending to 127.0.0.1: 95722(95722(Request 0 hi))
 // 2013/07/26 21:35:10 sent 26 bytes
-// ~$ 
-// 
+// ~$
+//
 // Then give them something to talk about:
-// 
+//
 // ~$ echo Request 0 hi | sudo go run ~/git/go-getting/paxos/iptest-send.go -a 127.0.0.1 -p 253
-// ~$ 
+// ~$
 
 package main
 
@@ -45,7 +45,9 @@ import (
 	"os"
 	"strings"
 )
+
 const groupIPProto = "ip:253"
+
 var addr *net.IPAddr
 var pid int
 
