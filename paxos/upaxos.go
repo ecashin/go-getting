@@ -71,9 +71,37 @@
 //             can respond to requests about previous 
 //             paxos instances (history)
 //
+// REQUESTS FROM CLIENTS
+//
 // The Request message is unusual in that its first field is not an
 // identifier of a Paxos participant.  It is sent by a client, not
-// necessarily a Paxos participant.
+// necessarily a Paxos participant.  Some conventions for request
+// messages:
+//
+//   * "Requst 0 {value}" asks the leader to attempt to achieve
+//	group consensus on the specified value by using whatever
+//	next instance number the leader needs to use.
+//
+//	In other words, this is a replicated write to the group.
+//
+//   * "Request 0" asks the leader to do a safe read by attempting
+//	to use a new instance number I to write something like,
+//	"safe read {value}", where "{value}" is the consensus
+//	value for instance I minus 1.
+//
+//	Safe read is not yet implemented.
+//
+//   * "Request N", for N > 0, asks the group to supply some
+//	value from the history.  Learners will respond if they
+//	know about a majority that has accepted a value in
+//	instance N.
+//
+//   * "Request N {value}", for N > 0, is an illegal request that
+//	results in undefined behavior in this demo.
+//
+// Responses to clients are simply logged.
+//
+// NOTES ON IMPLEMENTATION OPTIONS
 //
 // There's an interplay between leading and accepting.  For example,
 // if I see a new request but expect a peer to take the lead, I should
@@ -111,7 +139,7 @@ import (
 	"time"
 )
 
-const maxSends = 100	// in case things get out of hand, stop
+const maxSends = 50	// in case things get out of hand, stop
 
 var nSent int32
 var myID int = -1
@@ -260,7 +288,7 @@ func newWrite(f []string) Write {
 const maxReqQ = 10	// max 10 queued requests
 
 func lead(c chan Msg) {
-	instance := int64(0)	// consensus instance leader is trying to use
+	instance := int64(1)	// consensus instance leader is trying to use
 	lastp := int64(myID)	// proposal number last sent
 	rq := list.New()	// queued requests
 	nrq := 0		// number of queued requests
@@ -285,6 +313,11 @@ func lead(c chan Msg) {
 	nextInstance := func() {
 		catchup(instance+1, 0)
 	}
+	propose := func() {
+		s := fmt.Sprintf("%d Propose %d %d %s",
+				myID, instance, lastp, r.v)
+		go send(s)
+	}
 
 	for {
 		select {
@@ -300,9 +333,7 @@ func lead(c chan Msg) {
 				}
 				if r == nil {
 					r = &newr
-					s := fmt.Sprintf("%d Propose %d %d %s",
-						myID, instance, lastp, r.v)
-					go send(s)
+					propose()
 				} else if nrq < maxReqQ {
 					rq.PushBack(newr)
 					nrq++
@@ -337,7 +368,6 @@ func lead(c chan Msg) {
 					}
 				}
 				npromise++
-				log.Printf("got promise from %d\n", p.s)
 				if npromise > nGroup/2 {
 					if v == nil {
 						v = &r.v
@@ -384,15 +414,21 @@ func lead(c chan Msg) {
 						}
 					}
 					nextInstance()
+					if r != nil {
+						propose()
+					}
 				}
 			case "NACK":
 				nk := newNack(m.f)
 				if nk.i > instance || nk.p > lastp {
 					catchup(nk.i, nk.p)
+					if r != nil {
+						propose()
+					}
 				}
 			}
 		case <- time.After(30 * time.Second):
-			log.Print("tick tock")	// demo
+			log.Print("tick tock")	// XXXdemo
 		}
 	}
 }
@@ -472,6 +508,7 @@ func learn(c chan Msg, lf *log.Logger, ll []loggedLearn) {
 
 	// prime written with info recovered from log
 	for _, rec := range ll {
+		log.Printf("load learned: i:%d v:%s", rec.i, rec.v)
 		written[rec.i] = rec.v
 	}
 
