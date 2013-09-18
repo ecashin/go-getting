@@ -1,0 +1,138 @@
+upaxos - Paxos demo using unreliable broadcast over IP
+
+Features that are done:
+
+  * multiple states (AKA Multi-Paxos or "Parilament")
+
+  * readable history
+
+  * NACK messages allow leaders to operate efficiently
+
+  * persistent storage needed for recovery ("logs")
+
+  * recovery - participant starts up, reads logs, and participates
+
+Features to do next:
+
+  * leaders back off deterministically to enhance liveness
+
+  * history is optionally fast-readable, requiring no consensus
+    instance dedicated to handling a safe read
+
+  * support "Join N" command, where N is the last instance
+      learned by the candidate node.  A learner responds with
+	 the value a quorum accepted for instance N if it's historical.
+	 In that case, the candidate can try "Join N+1" if it learns
+	 the value for N.
+
+	 Or, if there is no quorum yet for instance N, a leader
+	 attempts to propose that the group be enlarged.  When
+	 the candidate sees consensus on its own membership in
+	 the group, it is up to date and fully participating.
+
+	 Nobody joins with an incomplete history, so the current
+	 group can always answer questions about past states.
+
+	 This will be the R_1 reconfiguration scheme described in
+	 Lamport's Reconfiguration Tutorial.
+
+Features for Someday or Never:
+
+  * history compaction in learner
+
+	Once the learner knows a quorum has accepted a value,
+	it can forget all the extra information about who accepted
+	what with what proposal number.
+
+  * Concurrent consensus instances
+
+example usage (best to run upaxos in different terminals):
+
+  ecashin@atala paxos$ sudo go run upaxos.go -n 3 -i 0 &
+  ecashin@atala paxos$ sudo go run upaxos.go -n 3 -i 1 &
+  ecashin@atala paxos$ sudo go run upaxos.go -n 3 -i 2 &
+  
+  ecashin@atala ~$ echo Request 0 one | \
+  	sudo go run iptest-send.go -a 127.0.0.1 -p 253
+  ecashin@atala ~$ echo Request 0 two | \
+  	sudo go run iptest-send.go -a 127.0.0.1 -p 253
+  ecashin@atala ~$ echo Request 0 three | \
+  	sudo go run iptest-send.go -a 127.0.0.1 -p 253
+  ecashin@atala ~$ echo Request 2 | \
+  	sudo go run iptest-send.go -a 127.0.0.1 -p 253
+  ecashin@atala ~$ echo quit | \
+  	sudo go run iptest-send.go -a 127.0.0.1 -p 253
+
+When you see "OK" in the logs, that's Paxos responding to you that
+there has been consensus on a value.
+
+
+DESIGN
+
+The main thread handles starts a goroutine:
+
+  listener: receives messages
+
+... which copies each message into multiple channels, one
+for each role that acts on received messages.  Goroutines
+for each such role ignore or act on the messages as appropriate.
+
+  leader:   handles Request, NACK, Promise, Accept;
+  	       sends Propose, Write, Written
+
+  acceptor: handles Propose, Write;
+  	       sends NACK, Promise, Accept
+
+  learner:  notes observed quorums;
+            can respond to requests about previous 
+            paxos instances (history)
+
+REQUESTS FROM CLIENTS
+
+The Request message is unusual in that its first field is not an
+identifier of a Paxos participant.  It is sent by a client, not
+necessarily a Paxos participant.  Some conventions for request
+messages:
+
+  * "Requst 0 {value}" asks the leader to attempt to achieve
+	group consensus on the specified value by using whatever
+	next instance number the leader needs to use.
+
+	In other words, this is a replicated write to the group.
+
+  * "Request 0" asks the leader to do a safe read by attempting
+	to use a new instance number I to write something like,
+	"safe read {value}", where "{value}" is the consensus
+	value for instance I minus 1.
+
+	Safe read is not yet implemented.
+
+  * "Request N", for N > 0, asks the group to supply some
+	value from the history.  Learners will respond if they
+	know about a majority that has accepted a value in
+	instance N.
+
+  * "Request N {value}", for N > 0, is an illegal request that
+	results in undefined behavior in this demo.
+
+Responses to clients are simply logged.
+
+NOTES ON IMPLEMENTATION OPTIONS
+
+  There's an interplay between leading and accepting.  For example, if
+  I see a new request but expect a peer to take the lead, I should
+  timeout and take the lead myself (delayed according to my ID, to
+  avoid racing with other peers), if I don't see any "propose"
+  message.  So the state machine design is attractive.
+  
+  However, a pure state machine design is awkward because the real
+  state of the program is an N-tuple for the N concurrently running
+  roles, and the combinations mean there are very many states.
+  
+  Using goroutines should result in more understandable code.
+  
+  Paxos over TCP would be complicated by the extra functionality of
+  TCP that insulates software from the realities that Paxos is
+  designed for, like failing networks and nodes.  Broadcast is
+  especially nice, since several optimizations are allowed by
+  snooping.
