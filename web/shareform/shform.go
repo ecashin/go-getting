@@ -4,6 +4,7 @@ import (
 	"code.google.com/p/xsrftoken"
 	"encoding/json"
 	"github.com/gorilla/mux"
+	"html/template"
 	"net/http"
 )
 
@@ -13,7 +14,22 @@ type Message struct {
 	Valid      bool
 }
 
-func serveHTTP(w http.ResponseWriter, r *http.Request) {
+type Index struct {
+	Welcome string
+}
+
+func serveIndex(w http.ResponseWriter, r *http.Request) {
+	index, err := template.ParseFiles("index.html")
+	if err != nil {
+		w.Write([]byte(err.Error()))
+	}
+	err = index.Execute(w, &Index{Welcome: "Hello."})
+	if err != nil {
+		w.Write([]byte(err.Error()))
+	}
+}
+
+func serveDbg(w http.ResponseWriter, r *http.Request) {
 	key := "shform No One Gonna Guess Dis"
 	user := r.RemoteAddr
 	action := r.Method + r.URL.Path
@@ -31,7 +47,8 @@ func serveHTTP(w http.ResponseWriter, r *http.Request) {
 // http://www.gorillatoolkit.org/pkg/mux
 func main() {
 	r := mux.NewRouter()
-	r.HandleFunc("/", serveHTTP)
+	r.HandleFunc("/dbg", serveDbg)
+	r.HandleFunc("/", serveIndex)
 	http.Handle("/", r)
 	http.ListenAndServe(":8181", nil)
 }
