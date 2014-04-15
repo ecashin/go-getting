@@ -1,15 +1,30 @@
 package main
 
 import (
+	"code.google.com/p/xsrftoken"
 	"encoding/json"
 	"github.com/gorilla/mux"
 	"net/http"
 )
 
+// Members have to be capitalized to get marshalled by json.
+type Message struct {
+	Csrf_token string
+	Valid      bool
+}
+
 func serveHTTP(w http.ResponseWriter, r *http.Request) {
-	buf, err := json.Marshal([]string{"Hi.", "There."})
+	key := "shform No One Gonna Guess Dis"
+	user := r.RemoteAddr
+	action := r.Method + r.URL.Path
+	csrf := xsrftoken.Generate(key, user, action)
+	valid := xsrftoken.Valid(csrf, key, user, action)
+	msg := Message{csrf, valid}
+	buf, err := json.Marshal(msg)
 	if err == nil {
 		w.Write(buf)
+	} else {
+		w.Write([]byte(err.Error()))
 	}
 }
 
