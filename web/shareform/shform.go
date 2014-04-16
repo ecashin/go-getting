@@ -30,7 +30,10 @@ func serveIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveDbg(w http.ResponseWriter, r *http.Request) {
+
+	// XXX: Site config file would provide this secret.
 	key := "shform No One Gonna Guess Dis"
+
 	user := r.RemoteAddr
 	action := r.Method + r.URL.Path
 	csrf := xsrftoken.Generate(key, user, action)
