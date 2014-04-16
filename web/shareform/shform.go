@@ -4,7 +4,9 @@ import (
 	"code.google.com/p/xsrftoken"
 	"encoding/json"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
 	"html/template"
+	"log"
 	"net/http"
 )
 
@@ -16,29 +18,48 @@ type Message struct {
 
 type Index struct {
 	Welcome string
+	Csrf    string
 }
 
+// XXX: Load from required source external to the source code
+//  for production use.
+const siteSecret = "Loaded from site config file."
+
+var store = sessions.NewCookieStore([]byte(siteSecret))
+
 func serveIndex(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session-name")
+	if session.IsNew {
+		log.Printf("new session from %v", r.RemoteAddr)
+		// store stuff, e.g., session.Values["answer"] = 42
+		session.Save(r, w)
+	}
 	index, err := template.ParseFiles("index.html")
 	if err != nil {
 		w.Write([]byte(err.Error()))
 	}
-	err = index.Execute(w, &Index{Welcome: "Hello."})
+	err = index.Execute(w, &Index{Welcome: "Hello.", Csrf: csrf(r)})
 	if err != nil {
 		w.Write([]byte(err.Error()))
 	}
 }
 
-func serveDbg(w http.ResponseWriter, r *http.Request) {
-
-	// XXX: Site config file would provide this secret.
-	key := "shform No One Gonna Guess Dis"
-
+func csrf(r *http.Request) string {
 	user := r.RemoteAddr
 	action := r.Method + r.URL.Path
-	csrf := xsrftoken.Generate(key, user, action)
-	valid := xsrftoken.Valid(csrf, key, user, action)
-	msg := Message{csrf, valid}
+	return xsrftoken.Generate(siteSecret, user, action)
+}
+
+func csrf_ok(r *http.Request, token string) bool {
+	user := r.RemoteAddr
+	action := r.Method + r.URL.Path
+	return xsrftoken.Valid(token, siteSecret, user, action)
+}
+
+func serveDbg(w http.ResponseWriter, r *http.Request) {
+	token := csrf(r)
+	valid := csrf_ok(r, token)
+	msg := Message{token, valid}
 	buf, err := json.Marshal(msg)
 	if err == nil {
 		w.Write(buf)
