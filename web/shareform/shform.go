@@ -49,6 +49,10 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/dbg", serveDbg)
 	r.HandleFunc("/", serveIndex)
+	// https://groups.google.com/forum/#!topic/gorilla-web/uspFHanLI3s
+	r.PathPrefix("/pub/").
+		Handler(http.StripPrefix("/pub/",
+		http.FileServer(http.Dir("pub/"))))
 	http.Handle("/", r)
 	http.ListenAndServe(":8181", nil)
 }
