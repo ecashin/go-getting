@@ -46,6 +46,11 @@ Missing Features
 
 Much is missing from this simple proof of concept, including ...
 
+* Form elements --- Currently only the "Band name" field is
+  synchronized between the different users.  I plan to handle multiple
+  form elements.
+* Testing --- This quick sketch has no tests.  It needs unit tests
+  and integration tests.
 * User identities --- A user should have a way to self identify, so
   that each user can tell who is making what changes.
 
