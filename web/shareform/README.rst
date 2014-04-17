@@ -13,6 +13,12 @@ edits in real time.
    :depth: 1
    :backlinks: none
 
+.. image:: https://raw.githubusercontent.com/ecashin/go-getting/master/web/shareform/screen-shot.png
+    :alt: Chrome and Firefox in sync
+    :width: 833
+    :height: 833
+    :align: center
+
 ======================
 Architectural Overview
 ======================
