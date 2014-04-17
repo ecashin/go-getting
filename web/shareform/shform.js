@@ -15,9 +15,8 @@ $(document).ready(function () {
     };
 
     if (window["WebSocket"]) {
-        // XXXtodo: Use URL from templating.
         console.log("setting up WebSocket");
-        wsconn = new WebSocket("ws://127.0.0.1:8181/ws");
+        wsconn = new WebSocket("{{$}}");
         wsconn.onclose = function(evt) {
             console.log("connection closed");
         }

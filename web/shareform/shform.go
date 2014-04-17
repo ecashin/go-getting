@@ -49,6 +49,29 @@ func serveIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+const port = ":8181"
+const wsURL = "ws://127.0.0.1" + port + "/ws"
+
+func serveJs(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session-name")
+	if session.IsNew {
+		log.Printf("reject no-session js request from %v",
+			r.RemoteAddr)
+		return
+	}
+	index, err := template.ParseFiles("shform.js")
+	if err != nil {
+		log.Printf("template parse error: %s", err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "text/javascript")
+	err = index.Execute(w, wsURL)
+	if err != nil {
+		log.Printf("template execute error: %s", err.Error())
+		return
+	}
+}
+
 func csrf(r *http.Request) string {
 	user := r.RemoteAddr
 	action := r.Method + r.URL.Path
@@ -202,10 +225,11 @@ func main() {
 	r.HandleFunc("/dbg", serveDbg)
 	r.HandleFunc("/", serveIndex)
 	r.HandleFunc("/ws", serveWs)
+	r.HandleFunc("/shform.js", serveJs)
 	// https://groups.google.com/forum/#!topic/gorilla-web/uspFHanLI3s
 	r.PathPrefix("/pub/").
 		Handler(http.StripPrefix("/pub/",
 		http.FileServer(http.Dir("pub/"))))
 	http.Handle("/", r)
-	http.ListenAndServe(":8181", nil)
+	http.ListenAndServe(port, nil)
 }
