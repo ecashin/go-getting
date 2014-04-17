@@ -1,3 +1,6 @@
+// The gorilla websocket server draws upon the module author's example
+// at this URL: http://gary.burd.info/go-websocket-chat
+
 package main
 
 import (
@@ -5,8 +8,10 @@ import (
 	"encoding/json"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
+	"github.com/gorilla/websocket"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 )
 
@@ -68,11 +73,135 @@ func serveDbg(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type hub struct {
+	// The keys are the registered ws connections.
+	connections map[*wsconn]bool
+
+	// Outgoing messages to the clients.
+	share chan UpdateMsg
+
+	// Note clients through this channel.
+	register chan *wsconn
+
+	// Forget clients through this channel.
+	unregister chan *wsconn
+}
+
+// This data structure is used to route messages.
+var h = hub{
+	share:       make(chan UpdateMsg),
+	register:    make(chan *wsconn),
+	unregister:  make(chan *wsconn),
+	connections: make(map[*wsconn]bool),
+}
+
+func (h *hub) run() {
+	log.Print("hub runs")
+	for {
+		select {
+		case c := <-h.register:
+			log.Printf("register ws client %v", c.ws.RemoteAddr())
+			h.connections[c] = true
+		case c := <-h.unregister:
+			log.Printf("unregister ws client %v", c.ws.RemoteAddr())
+			delete(h.connections, c)
+			close(c.send)
+		case m := <-h.share:
+			log.Printf("hub shares %s", string(m.data))
+			for c := range h.connections {
+				if c.ws.RemoteAddr() == m.origin {
+					log.Printf("hub skips %v",
+						m.origin)
+					continue
+				}
+				select {
+				case c.send <- m.data:
+					log.Printf("hub sent (%s) to %v",
+						string(m.data),
+						c.ws.RemoteAddr())
+				default:
+					log.Printf("hub removes %v",
+						c.ws.RemoteAddr())
+					delete(h.connections, c)
+					close(c.send)
+					go c.ws.Close()
+				}
+			}
+		}
+	}
+}
+
+type wsconn struct {
+	ws   *websocket.Conn
+	send chan []byte
+}
+
+type UpdateMsg struct {
+	origin net.Addr
+	data   []byte
+}
+
+func (c *wsconn) reader() {
+	log.Print("reader start")
+	for {
+		_, message, err := c.ws.ReadMessage()
+		if err != nil {
+			log.Print("reader exits on error")
+			break
+		}
+		log.Print("reader gets message: %s", string(message))
+		h.share <- UpdateMsg{c.ws.RemoteAddr(), message}
+	}
+	log.Print("reader close ws")
+	c.ws.Close()
+}
+
+func (c *wsconn) writer() {
+	log.Print("writer start")
+	for message := range c.send {
+		err := c.ws.WriteMessage(websocket.TextMessage, message)
+		if err != nil {
+			log.Print("writer error")
+			break
+		}
+	}
+	log.Print("writer close ws")
+	c.ws.Close()
+}
+
+func serveWs(w http.ResponseWriter, r *http.Request) {
+	log.Print("serveWs")
+	session, _ := store.Get(r, "session-name")
+	if session.IsNew {
+		log.Printf("rejecting ws without session from %v",
+			r.RemoteAddr)
+		return
+	}
+	ws, err := websocket.Upgrade(w, r, nil, 1024, 1024)
+	if _, ok := err.(websocket.HandshakeError); ok {
+		log.Printf("rejecting ws with bad handshake from %v",
+			r.RemoteAddr)
+		http.Error(w, "Not a websocket handshake", 400)
+		return
+	} else if err != nil {
+		log.Printf("serveWs error: %s", err.Error())
+		return
+	}
+	log.Printf("serveWs ws connection from %v", r.RemoteAddr)
+	c := &wsconn{send: make(chan []byte, 256), ws: ws}
+	h.register <- c
+	defer func() { h.unregister <- c }()
+	go c.writer()
+	c.reader()
+}
+
 // http://www.gorillatoolkit.org/pkg/mux
 func main() {
+	go h.run()
 	r := mux.NewRouter()
 	r.HandleFunc("/dbg", serveDbg)
 	r.HandleFunc("/", serveIndex)
+	r.HandleFunc("/ws", serveWs)
 	// https://groups.google.com/forum/#!topic/gorilla-web/uspFHanLI3s
 	r.PathPrefix("/pub/").
 		Handler(http.StripPrefix("/pub/",
