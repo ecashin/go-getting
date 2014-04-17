@@ -4,7 +4,7 @@ var shform = shform || {};
 $(document).ready(function () {
     "use strict";
 
-    var wsconn,                 // WebSocket connection
+    var wsconn,                     // WebSocket connection
     send = function (msg) {
         if (wsconn) {
             console.log("sending message (" + msg + ") to ws");
@@ -22,6 +22,7 @@ $(document).ready(function () {
         }
         wsconn.onmessage = function(evt) {
             console.log("received: " + evt.data);
+            shform.viewModel.instantaneousValue(evt.data);
         }
         shform.wsconn = wsconn;
     } else {
@@ -51,5 +52,6 @@ $(document).ready(function () {
         }, this);
     }
 
-    ko.applyBindings(new AppViewModel());
+    shform.viewModel = new AppViewModel();
+    ko.applyBindings(shform.viewModel);
 });
