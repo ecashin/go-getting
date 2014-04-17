@@ -34,7 +34,8 @@ From the user inward, these are the main components of this demo:
   throttling/batching of events.
 * *WebSocket* --- The JavaScript running in the browser communicates
   asynchronously with a back-end server via full-duplex reliable
-  channel using the standard HTML 5 WebSocket feature.
+  channel using the standard HTML 5 `WebSocket
+  <http://www.websocket.org/>`_ feature.
 * *Gorilla* --- The web server, implemented in `Go
   <http://golang.org/>`_, uses the `Gorilla toolkit
   <http://www.gorillatoolkit.org/>`_, which provides high-level
@@ -85,7 +86,7 @@ Much is missing from this simple proof of concept, including ...
     versions of the form effectively become snapshots if they're
     retained indefinitely.
 
-* Flakey networking tolerance --- Especially with mobile, the network
+* Tolerance for flakey networking --- Especially with mobile, the network
   could come and go.  The client needs to be able to re-establish a
   WebSocket connection after losing connectivity.
 
