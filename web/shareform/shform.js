@@ -5,12 +5,17 @@ $(document).ready(function () {
     "use strict";
 
     var wsconn,                     // WebSocket connection
+    last_received,
     send = function (msg) {
+        if (msg === last_received) {
+            console.log("not sending last received");
+            return;
+        }
         if (wsconn) {
             console.log("sending message (" + msg + ") to ws");
             wsconn.send(msg);
         } else {
-            console.log("NOT sending message (" + msg + ") to ws");
+            console.log("no ws.  NOT sending message (" + msg + ")");
         }
     };
 
@@ -22,6 +27,7 @@ $(document).ready(function () {
         }
         wsconn.onmessage = function(evt) {
             console.log("received: " + evt.data);
+            last_received = evt.data;
             shform.viewModel.instantaneousValue(evt.data);
         }
         shform.wsconn = wsconn;
@@ -45,10 +51,8 @@ $(document).ready(function () {
         // Keep a log of the throttled values passed to the WebSocket.
         this.loggedValues = ko.observableArray([]);
         this.delayedValue.subscribe(function (val) {
-            if (val !== '') {
-                this.loggedValues.push(val);
-                send(val);
-            }
+            this.loggedValues.push(val);
+            send(val);
         }, this);
     }
 
