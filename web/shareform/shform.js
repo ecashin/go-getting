@@ -28,19 +28,20 @@ $(document).ready(function () {
         wsconn.onmessage = function(evt) {
             console.log("received: " + evt.data);
             last_received = evt.data;
-            shform.viewModel.instantaneousValue(evt.data);
+            shform.viewModel.bandVal(evt.data);
         }
         shform.wsconn = wsconn;
     } else {
-        // XXX fall-back (e.g., to long polling) here.
+        // XXXtodo: Add fall-back (e.g., to long polling) here.
+        $("p.lead").html("Sorry.  Your browser does not support WebSockets.");
         console.log("no ws support in browser");
     }
 
     // based on example in Knockout docs:
     // http://knockoutjs.com/documentation/rateLimit-observable.html
     function AppViewModel() {
-        this.instantaneousValue = ko.observable();
-        this.delayedValue = ko.computed(this.instantaneousValue)
+        this.bandVal = ko.observable();
+        this.bandSlowVal = ko.computed(this.bandVal)
             .extend({
                 rateLimit: {
                     method: "notifyWhenChangesStop",
@@ -50,7 +51,7 @@ $(document).ready(function () {
 
         // Keep a log of the throttled values passed to the WebSocket.
         this.loggedValues = ko.observableArray([]);
-        this.delayedValue.subscribe(function (val) {
+        this.bandSlowVal.subscribe(function (val) {
             this.loggedValues.push(val);
             send(val);
         }, this);
