@@ -78,6 +78,12 @@ $(document).ready(function () {
     shform.viewModels.instrument.instSel.subscribe(function (sel) {
         send('instrument', 'instSel', sel);
     });
+    shform.viewModels.electric = {
+        "electricSel" : ko.observable("electric")
+    };
+    shform.viewModels.electric.electricSel.subscribe(function (sel) {
+        send('electric', 'electricSel', sel);
+    });
     shform.viewModels.band = new BandViewModel();
     for (prop in shform.viewModels) {
         if (!shform.viewModels.hasOwnProperty(prop)) {
