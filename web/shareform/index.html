@@ -45,12 +45,20 @@
 
   <div class="theform">
     <form class="form-horizontal" role="form">
+
       <div class="form-group">
-	<label for="inputEmail" class="col-sm-2 control-label">Email</label>
-	<div class="col-sm-10">
-	  <input type="email" class="form-control" id="inputEmail" placeholder="Email">
-	</div>
+        <label for="instrument" class="col-sm-2 control-label">Favorite Instrument</label>
+        <div class="col-sm-10">
+          <select id="instrument" class="form-control">
+            <option>Guitar</option>
+            <option>Bass</option>
+            <option>Drums</option>
+            <option>Vocals</option>
+            <option>Moog</option>
+          </select>
+        </div>
       </div>
+
       <div class="form-group">
 	<label for="inputBand" class="col-sm-2 control-label">Favorite Band</label>
 	<div class="col-sm-10">
@@ -59,18 +67,32 @@
              class="form-control" id="inputBand" placeholder="Band Name">
 	</div>
       </div>
+
+      <div class="form-group">
+        <div class="col-sm-offset-2 col-sm-10">
+            <label class="radio-inline">
+              <input type="radio" name="optionsElectric" id="optionElectric" value="optionElectric" checked>
+              Electric
+            </label>
+            <label class="radio-inline">
+              <input type="radio" name="optionsElectric" id="optionAcoustic" value="optionAcoustic">
+              Acoustic
+            </label>
+        </div>
+      </div>
+
       <div class="form-group">
 	<div class="col-sm-offset-2 col-sm-10">
 	  <div class="checkbox">
             <label>
-              <input type="checkbox"> Digital music only
+              <input type="checkbox" id="feeling"> With Feeling
             </label>
 	  </div>
 	</div>
       </div>
     </form>
 
-    <div data-bind="visible: loggedValues().length > 0">
+    <div style="display: none" data-bind="visible: loggedValues().length > 0">
       <h3>Change log (for debugging)</h3>
       <ul data-bind="foreach: loggedValues">
         <li data-bind="text: $data"></li>
