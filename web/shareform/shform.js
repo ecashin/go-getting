@@ -66,14 +66,18 @@ $(document).ready(function () {
             });
 
         // Keep a log of the throttled values passed to the WebSocket.
-        this.loggedValues = ko.observableArray([]);
         this.bandSlowVal.subscribe(function (val) {
-            this.loggedValues.push(val);
             send(this.name, "bandVal", val);
         }, this);
     }
 
     shform.viewModels = {};
+    shform.viewModels.instrument = {
+        "instSel" : ko.observable("Guitar")
+    };
+    shform.viewModels.instrument.instSel.subscribe(function (sel) {
+        send('instrument', 'instSel', sel);
+    });
     shform.viewModels.band = new BandViewModel();
     for (prop in shform.viewModels) {
         if (!shform.viewModels.hasOwnProperty(prop)) {

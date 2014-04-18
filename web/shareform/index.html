@@ -46,10 +46,11 @@
   <div class="theform">
     <form class="form-horizontal" role="form">
 
-      <div class="form-group">
+      <div class="form-group" id="instrumentDiv">
         <label for="instrument" class="col-sm-2 control-label">Favorite Instrument</label>
         <div class="col-sm-10">
-          <select id="instrument" class="form-control">
+          <select id="instrument" class="form-control" data-bind="value: instSel">
+            <option>Tambourine</option>
             <option>Guitar</option>
             <option>Bass</option>
             <option>Drums</option>
@@ -91,13 +92,6 @@
 	</div>
       </div>
     </form>
-
-    <div data-bind="visible: loggedValues().length > 0">
-      <h3>Change log (for debugging)</h3>
-      <ul data-bind="foreach: loggedValues">
-        <li data-bind="text: $data"></li>
-      </ul>
-    </div>
   </div>
 
   <script type="text/javascript">
