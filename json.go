@@ -1,4 +1,4 @@
-// don't know why this prints "{}" for me
+// You only get fields that have capitalized names in the JSON.
 
 package main
 
@@ -8,15 +8,31 @@ import (
 )
 
 func main() {
-	type TData struct {
+	type TDataNoWorkie struct {
 		a string
 		b int
 	}
-	td := TData {
+	type TData struct {
+		A string
+		B int
+		c string
+	}
+	td := TDataNoWorkie{
 		a: "the letter a",
 		b: 23,
 	}
+	tdw := TData{
+		A: "the letter a",
+		B: 23,
+		c: "will not appear",
+	}
 	j, err := json.Marshal(td)
+	if err != nil {
+		panic(err)
+	}
+	os.Stdout.Write(j)
+
+	j, err = json.Marshal(tdw)
 	if err != nil {
 		panic(err)
 	}
