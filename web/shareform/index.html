@@ -59,7 +59,7 @@
         </div>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" id="bandDiv">
 	<label for="inputBand" class="col-sm-2 control-label">Favorite Band</label>
 	<div class="col-sm-10">
 	  <input
@@ -92,7 +92,7 @@
       </div>
     </form>
 
-    <div style="display: none" data-bind="visible: loggedValues().length > 0">
+    <div data-bind="visible: loggedValues().length > 0">
       <h3>Change log (for debugging)</h3>
       <ul data-bind="foreach: loggedValues">
         <li data-bind="text: $data"></li>

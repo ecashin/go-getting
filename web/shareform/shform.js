@@ -58,5 +58,5 @@ $(document).ready(function () {
     }
 
     shform.viewModel = new AppViewModel();
-    ko.applyBindings(shform.viewModel);
+    ko.applyBindings(shform.viewModel, $('#bandDiv').get(0));
 });
