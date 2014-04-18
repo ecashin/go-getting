@@ -19,6 +19,21 @@ edits in real time.
     :height: 833
     :align: center
 
+=====
+Usage
+=====
+
+To start the server, use the command::
+
+  go run shform.go
+
+Then browse to the hard-coded IP and port with two new-ish browsers.
+
+http://127.0.0.1:8181/
+
+You'll be able to see changes to the form in both browsers if neither
+is Internet Explorer.
+
 ======================
 Architectural Overview
 ======================
