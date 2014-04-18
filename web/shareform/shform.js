@@ -84,6 +84,12 @@ $(document).ready(function () {
     shform.viewModels.electric.electricSel.subscribe(function (sel) {
         send('electric', 'electricSel', sel);
     });
+    shform.viewModels.feeling = {
+        "withFeeling" : ko.observable(true)
+    };
+    shform.viewModels.feeling.withFeeling.subscribe(function (yesno) {
+        send('feeling', 'withFeeling', yesno);
+    });
     shform.viewModels.band = new BandViewModel();
     for (prop in shform.viewModels) {
         if (!shform.viewModels.hasOwnProperty(prop)) {
