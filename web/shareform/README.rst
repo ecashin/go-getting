@@ -86,6 +86,9 @@ Much is missing from this simple proof of concept, including ...
   One idea would be to outline the changing field in a highlight color
   and append an italicized (*"Eugene is editing ..."*) text string to
   the field's label.
+
+  The band field has the highlighting.  Its highlighting mechanism
+  could be factored out and used by the other fields.
 * Validate CSRF --- To foil cross-site request forgery (CSRF), the
   CSRF token that is already included in the HTML would need to be
   sent by the client to the server and validated.
