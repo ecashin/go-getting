@@ -9,10 +9,11 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/gorilla/websocket"
-	"html/template"
+	htpt "html/template"
 	"log"
 	"net"
 	"net/http"
+	ttpt "text/template"
 )
 
 // Members have to be capitalized to get marshalled by json.
@@ -39,7 +40,7 @@ func serveIndex(w http.ResponseWriter, r *http.Request) {
 		// store stuff, e.g., session.Values["answer"] = 42
 		session.Save(r, w)
 	}
-	index, err := template.ParseFiles("index.html")
+	index, err := htpt.ParseFiles("index.html")
 	if err != nil {
 		w.Write([]byte(err.Error()))
 	}
@@ -59,7 +60,7 @@ func serveJs(w http.ResponseWriter, r *http.Request) {
 			r.RemoteAddr)
 		return
 	}
-	index, err := template.ParseFiles("shform.js")
+	index, err := ttpt.ParseFiles("shform.js")
 	if err != nil {
 		log.Printf("template parse error: %s", err.Error())
 		return

@@ -8,8 +8,7 @@ $(document).ready(function () {
     prop,                       // property
     lastReceived,
     send = function (vm, prop, val) {
-        var viewModel = shform.viewModels[vm],
-        msg = JSON.stringify({
+        var msg = JSON.stringify({
             "vm" : vm,
             "prop" : prop,
             "val" : val
@@ -33,15 +32,18 @@ $(document).ready(function () {
             console.log("setting up WebSocket");
             wsconn = new WebSocket("{{$}}");
             wsconn.onclose = function(evt) {
-                console.log("connection closed");
-            }
+                console.log("connection closed: " + evt);
+            };
             wsconn.onmessage = function(evt) {
                 console.log("received: " + evt.data);
                 msg = $.parseJSON(evt.data);
                 lastReceived = JSON.stringify(msg);
                 viewModel = shform.viewModels[msg.vm];
+                if (viewModel.doHighlight) {
+                    viewModel.doHighlight();
+                }
                 viewModel[msg.prop](msg.val);
-            }
+            };
             shform.wsconn = wsconn;
         } else {
             // XXXtodo: Add fall-back (e.g., to long polling) here.
@@ -55,9 +57,13 @@ $(document).ready(function () {
     // based on example in Knockout docs:
     // http://knockoutjs.com/documentation/rateLimit-observable.html
     function BandViewModel() {
-        this.name = "band";
-        this.bandVal = ko.observable();
-        this.bandSlowVal = ko.computed(this.bandVal)
+        var self = this,
+        hlalpha = 0,                // highlighting border's alpha
+        hlmax = 150;
+
+        self.name = "band";
+        self.bandVal = ko.observable();
+        self.bandSlowVal = ko.computed(self.bandVal)
             .extend({
                 rateLimit: {
                     method: "notifyWhenChangesStop",
@@ -65,11 +71,33 @@ $(document).ready(function () {
                 }
             });
 
-        // Keep a log of the throttled values passed to the WebSocket.
-        this.bandSlowVal.subscribe(function (val) {
-            send(this.name, "bandVal", val);
-        }, this);
-    }
+        self.bandSlowVal.subscribe(function (val) {
+            send(self.name, "bandVal", val);
+        }, self);
+        self.doHighlight = function () {
+            var sel = "#" + self.name + "Div",
+            fadeStep = 100,
+            fade = function () {
+                setTimeout(function () {
+                    hlalpha = hlalpha * 0.45;
+                    if (hlalpha < 0.001) {
+                        hlalpha = 0;
+                    } else {
+                        setTimeout(fade, fadeStep);
+                    }
+                    $(sel)
+                        .css("border",
+                             "3px solid rgba(228, 255, 77, "+hlalpha+")");
+                }, fadeStep);
+            };
+
+            hlalpha = hlmax;
+            $(sel)
+                .css("border",
+                     "3px solid rgba(228, 255, 77, "+hlalpha+")");
+            setTimeout(fade, fadeStep);
+        };
+    };
 
     shform.viewModels = {};
     shform.viewModels.instrument = {
@@ -92,9 +120,9 @@ $(document).ready(function () {
     });
     shform.viewModels.band = new BandViewModel();
     for (prop in shform.viewModels) {
-        if (!shform.viewModels.hasOwnProperty(prop)) {
-            continue;
+        if (shform.viewModels.hasOwnProperty(prop)) {
+            ko.applyBindings(shform.viewModels[prop],
+                             $('#' + prop + 'Div').get(0));
         }
-        ko.applyBindings(shform.viewModels[prop], $('#' + prop + 'Div').get(0));
     }
 });
