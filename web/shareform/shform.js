@@ -75,6 +75,12 @@ $(document).ready(function () {
                      "3px solid rgba(228, 255, 77, "+vm.hlalpha+")");
             setTimeout(fade, fadeStep);
         };
+    },
+    vmSetDefaults = function (vm) {
+        vm.hlmax = 150;       // maximum highlighting alpha
+        vm.hlalpha = 0;       // highlighting alpha
+        vm.doHighlight = highlightFn(vm);
+        return vm;
     };
 
     setupWs();
@@ -84,8 +90,7 @@ $(document).ready(function () {
     function BandViewModel() {
         var self = this;
 
-        self.hlmax = 150;       // maximum highlighting alpha
-        self.hlalpha = 0;       // highlighting alpha
+        vmSetDefaults(self);
         self.name = "band";
         self.bandVal = ko.observable();
         self.bandSlowVal = ko.computed(self.bandVal)
@@ -95,29 +100,30 @@ $(document).ready(function () {
                     timeout: 400
                 }
             });
-
         self.bandSlowVal.subscribe(function (val) {
             send(self.name, "bandVal", val);
         }, self);
-        self.doHighlight = highlightFn(self);
     };
 
     shform.viewModels = {};
-    shform.viewModels.instrument = {
+    shform.viewModels.instrument = vmSetDefaults({
+        "name" : "instrument",
         "instSel" : ko.observable("Guitar")
-    };
+    });
     shform.viewModels.instrument.instSel.subscribe(function (sel) {
         send('instrument', 'instSel', sel);
     });
-    shform.viewModels.electric = {
+    shform.viewModels.electric = vmSetDefaults({
+        "name" : "electric",
         "electricSel" : ko.observable("electric")
-    };
+    });
     shform.viewModels.electric.electricSel.subscribe(function (sel) {
         send('electric', 'electricSel', sel);
     });
-    shform.viewModels.feeling = {
+    shform.viewModels.feeling = vmSetDefaults({
+        "name" : "feeling",
         "withFeeling" : ko.observable(true)
-    };
+    });
     shform.viewModels.feeling.withFeeling.subscribe(function (yesno) {
         send('feeling', 'withFeeling', yesno);
     });
