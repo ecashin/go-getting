@@ -79,16 +79,6 @@ Much is missing from this simple proof of concept, including ...
   what changes, increasing their confidence in the software.
 * Oauth or other --- The users could be authenticated using a trusted
   technology like `OAuth <http://en.wikipedia.org/wiki/OAuth>`_.
-* Visual Remote-Edit Cues --- When a remote user makes an edit, the
-  local user needs a way to quickly know that something has changed
-  and how.
-
-  One idea would be to outline the changing field in a highlight color
-  and append an italicized (*"Eugene is editing ..."*) text string to
-  the field's label.
-
-  The band field has the highlighting.  Its highlighting mechanism
-  could be factored out and used by the other fields.
 * Validate CSRF --- To foil cross-site request forgery (CSRF), the
   CSRF token that is already included in the HTML would need to be
   sent by the client to the server and validated.
