@@ -50,6 +50,31 @@ $(document).ready(function () {
             $("p.lead").html("Sorry.  Your browser does not support WebSockets.");
             console.log("no ws support in browser");
         }
+    },
+    highlightFn = function (vm) {
+        return function () {
+            var sel = "#" + vm.name + "Div",
+            fadeStep = 100,
+            fade = function () {
+                setTimeout(function () {
+                    vm.hlalpha = vm.hlalpha * 0.45;
+                    if (vm.hlalpha < 0.001) {
+                        vm.hlalpha = 0;
+                    } else {
+                        setTimeout(fade, fadeStep);
+                    }
+                    $(sel)
+                        .css("border",
+                             "3px solid rgba(228, 255, 77, "+vm.hlalpha+")");
+                }, fadeStep);
+            };
+
+            vm.hlalpha = vm.hlmax;
+            $(sel)
+                .css("border",
+                     "3px solid rgba(228, 255, 77, "+vm.hlalpha+")");
+            setTimeout(fade, fadeStep);
+        };
     };
 
     setupWs();
@@ -57,10 +82,10 @@ $(document).ready(function () {
     // based on example in Knockout docs:
     // http://knockoutjs.com/documentation/rateLimit-observable.html
     function BandViewModel() {
-        var self = this,
-        hlalpha = 0,                // highlighting border's alpha
-        hlmax = 150;
+        var self = this;
 
+        self.hlmax = 150;       // maximum highlighting alpha
+        self.hlalpha = 0;       // highlighting alpha
         self.name = "band";
         self.bandVal = ko.observable();
         self.bandSlowVal = ko.computed(self.bandVal)
@@ -74,29 +99,7 @@ $(document).ready(function () {
         self.bandSlowVal.subscribe(function (val) {
             send(self.name, "bandVal", val);
         }, self);
-        self.doHighlight = function () {
-            var sel = "#" + self.name + "Div",
-            fadeStep = 100,
-            fade = function () {
-                setTimeout(function () {
-                    hlalpha = hlalpha * 0.45;
-                    if (hlalpha < 0.001) {
-                        hlalpha = 0;
-                    } else {
-                        setTimeout(fade, fadeStep);
-                    }
-                    $(sel)
-                        .css("border",
-                             "3px solid rgba(228, 255, 77, "+hlalpha+")");
-                }, fadeStep);
-            };
-
-            hlalpha = hlmax;
-            $(sel)
-                .css("border",
-                     "3px solid rgba(228, 255, 77, "+hlalpha+")");
-            setTimeout(fade, fadeStep);
-        };
+        self.doHighlight = highlightFn(self);
     };
 
     shform.viewModels = {};
