@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func SortStdin(sorter func([]int64)) {
+func SortStdin(sortfn func([]int64)) {
 	in := bufio.NewReader(os.Stdin)
 	line, err := in.ReadBytes('\n')
 	a := []int64{}
@@ -23,5 +23,6 @@ func SortStdin(sorter func([]int64)) {
 		}
 		line, err = in.ReadBytes('\n')
 	}
+	sortfn(a)
 	fmt.Printf("%v", a)
 }

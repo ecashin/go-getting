@@ -6,5 +6,5 @@ all: $(PROGS)
 clean:
 	rm -f $(PROGS)
 
-%: %.go
+insertion_sort: insertion_sort.go src/intarr/intarr.go
 	GOPATH=`pwd` go build $<
