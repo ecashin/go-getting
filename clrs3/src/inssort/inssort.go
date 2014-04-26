@@ -1,10 +1,6 @@
-package main
+package inssort
 
-import (
-	"intarr"
-)
-
-func insSort(a []int64) {
+func Sort(a []int64) {
 	for j := 1; j < len(a); j++ {
 		key := a[j]
 		i := j - 1
@@ -14,8 +10,4 @@ func insSort(a []int64) {
 		}
 		a[i+1] = key
 	}
-}
-
-func main() {
-	intarr.SortStdin(insSort)
 }
