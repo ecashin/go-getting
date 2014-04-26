@@ -1,4 +1,4 @@
-package main
+package intarr
 
 import (
 	"bufio"
@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func main() {
+func SortStdin(sorter func([]int64)) {
 	in := bufio.NewReader(os.Stdin)
 	line, err := in.ReadBytes('\n')
 	a := []int64{}

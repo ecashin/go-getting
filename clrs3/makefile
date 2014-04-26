@@ -1,5 +1,10 @@
 
-all: insertion_sort
+PROGS = insertion_sort
+
+all: $(PROGS)
+
+clean:
+	rm -f $(PROGS)
 
 %: %.go
-	go build $<
+	GOPATH=`pwd` go build $<
