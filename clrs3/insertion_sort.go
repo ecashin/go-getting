@@ -4,19 +4,24 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
 func main() {
 	in := bufio.NewReader(os.Stdin)
 	line, err := in.ReadBytes('\n')
-	a := []string{}
+	a := []int64{}
 	for err == nil {
 		flds := strings.Fields(string(line))
-		for _, i := range flds {
+		for _, f := range flds {
+			i, err := strconv.ParseInt(f, 0, 64)
+			if err != nil {
+				panic(err)
+			}
 			a = append(a, i)
 		}
 		line, err = in.ReadBytes('\n')
 	}
-	fmt.Printf("%q", a)
+	fmt.Printf("%v", a)
 }
