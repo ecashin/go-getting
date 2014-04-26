@@ -1,13 +1,18 @@
 package main
 
 import (
-	"fmt"
 	"intarr"
 )
 
 func insSort(a []int64) {
-	for i := 1; i < len(a); i++ {
-		fmt.Print(a[i])
+	for j := 1; j < len(a); j++ {
+		key := a[j]
+		i := j - 1
+		for i > -1 && a[i] > key {
+			a[i+1] = a[i]
+			i--
+		}
+		a[i+1] = key
 	}
 }
 
