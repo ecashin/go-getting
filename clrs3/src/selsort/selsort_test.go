@@ -1,4 +1,4 @@
-package inssort
+package selsort
 
 import (
 	"testing"
