@@ -1,3 +1,4 @@
 This directory contains exercises based on the third edition of Cormen
 Leiserson Rivest & Stein.  The point is both to review stuff from
-C.S. classes and to review Go basics.
+C.S. classes and to review Go basics, but I sacrifice Go style for a
+more literal translation of their text or pseudocode.
