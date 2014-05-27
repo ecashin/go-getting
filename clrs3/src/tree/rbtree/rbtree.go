@@ -7,8 +7,14 @@ type Tree struct {
 	Label               string
 }
 
-type Visitor func(t *Tree)
+type Visitor func(t *Tree, data interface{})
 
-func (t *Tree) InOrder(visitor Visitor) {
-	visitor(t)
+func (t *Tree) InOrder(visitor Visitor, data interface{}) {
+	if t.Left != nil {
+		t.Left.InOrder(visitor, data)
+	}
+	visitor(t, data)
+	if t.Right != nil {
+		t.Right.InOrder(visitor, data)
+	}
 }
