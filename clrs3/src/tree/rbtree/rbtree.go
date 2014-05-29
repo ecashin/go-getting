@@ -18,3 +18,22 @@ func (t *Tree) InOrder(visitor Visitor, data interface{}) {
 		t.Right.InOrder(visitor, data)
 	}
 }
+
+func (t *Tree) LeftRotate() *Tree {
+	y := t.Right
+	t.Right = y.Left
+	if y.Left != nil {
+		y.Left.Parent = t
+	}
+	y.Parent = t.Parent
+	if t.Parent != nil {
+		if t.Parent.Left == t {
+			t.Parent.Left = y
+		} else {
+			t.Parent.Right = y
+		}
+	}
+	y.Left = t
+	t.Parent = y
+	return y
+}
