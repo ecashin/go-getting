@@ -1,0 +1,23 @@
+selfexe: selfexe.go payloadbin.go
+	go build $^
+
+.PHONY: clean realclean
+
+clean:
+	rm -f selfexe payload
+
+realclean: clean
+	rm -f *~
+
+payloadbin.go: payload
+	{ \
+	  echo 'package main'; \
+	  echo 'var Bin  = `` +'; \
+	  xxd -ps -c 2000 < $< | \
+	  sed 's|\([a-f0-9][a-f0-9]\)|\\x\1|g' | \
+	  sed 's|^|"|' | sed 's|$$|" + |'; \
+	  echo ' ``'; \
+	} > $@
+
+%: %.go
+	go build $<
