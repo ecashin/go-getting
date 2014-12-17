@@ -16,9 +16,6 @@ func main() {
 		panic(err)
 	}
 	buf := bytes.NewBufferString(Bin)
-	// f.WriteString(Bin)
-	// f.Close()
-	// panic("early")
 	g, err := gzip.NewReader(buf)
 	if err != nil {
 		panic(err)
