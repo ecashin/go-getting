@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"os"
 	"os/exec"
 )
@@ -12,7 +15,15 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	f.WriteString(Bin)
+	buf := bytes.NewBufferString(Bin)
+	// f.WriteString(Bin)
+	// f.Close()
+	// panic("early")
+	g, err := gzip.NewReader(buf)
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(f, g)
 	f.Close()
 
 	cmd := exec.Command(exe, os.Args[1:]...)
