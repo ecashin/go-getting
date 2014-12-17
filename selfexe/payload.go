@@ -1,9 +1,10 @@
 package main
 
-import "fmt"
-
-var tstring = `himom` + `himom`
+import (
+	"fmt"
+	"os"
+)
 
 func main() {
-     fmt.Println(tstring)
+     fmt.Println("HI", os.Args)
 }
