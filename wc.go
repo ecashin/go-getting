@@ -1,3 +1,9 @@
+// ecashin@montgomery:~/git/go-getting$ echo a b b c c c | go run wc.go
+// a 1
+// b 2
+// c 3
+// ecashin@montgomery:~/git/go-getting$ 
+
 package main
 
 import (
