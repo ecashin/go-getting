@@ -34,20 +34,6 @@ func randstr(x []byte) string {
 }
 
 
-func flipCoins(c chan string, done chan bool, s string) {
-	for i := 0; i < len(s); i++ {
-		n := s[i]
-		for j := 0; j < 8; j++ {
-			if n & 1 > 0 {
-				c <- "H"
-			} else {
-				c <- "T"
-			}
-			n = n >> 1
-		}
-	}
-}
-
 
 func main() {
 	resp, err := http.Get(NIST_RANDOM)
@@ -58,10 +44,16 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	c := make(chan string)
-	done := make(chan bool)
-	go flipCoins(c, done, randstr(body))
-	for toss := range c {
-		fmt.Println(toss)
+	counts := []int{0,0,0}
+	for i := 0; i < len(body); i++ {
+		n := body[i]
+		for j := 0; j < 8; j += 2 {
+			m := n & 3
+			if m != 3 {
+				counts[m] += 1
+			}
+			n = n >> 2
+		}
 	}
+	fmt.Println(counts)
 }
