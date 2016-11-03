@@ -10,13 +10,14 @@ import (
 
 const (
 	NIST_RANDOM = "https://beacon.nist.gov/rest/record/last"
+	N_ROUNDS    = 10
 )
 
 type Record struct {
 	XMLName    xml.Name `xml:"record"`
 	Version    string   `xml:"version"`
 	Freq       string   `xml:"frequency"`
-	Ts         string   `xml:"timeStamp"`
+	Ts         int      `xml:"timeStamp"`
 	SeedVal    string   `xml:"seedValue"`
 	PrevVal    string   `xml:"previousOutputValue"`
 	SigVal     string   `xml:"signatureValue"`
@@ -24,21 +25,37 @@ type Record struct {
 	StatusCode string   `xml:"statusCode"`
 }
 
-func nistBytes(x []byte) []byte {
+func nistURL(ts int) string {
+	return fmt.Sprintf("https://beacon.nist.gov/rest/record/previous/%d", ts)
+}
+
+func nistBytes(url string, nRounds int, c chan byte) {
+	if nRounds == 0 {
+		close(c)
+		return
+	}
+	doc := nistDoc(url)
 	v := &Record{}
-	err := xml.Unmarshal(x, &v)
+	err := xml.Unmarshal(doc, &v)
 	if err != nil {
 		panic(err)
 	}
+	// fmt.Println("debug: " + v.OutputVal)
 	a, err := hex.DecodeString(v.OutputVal)
 	if err != nil {
 		panic(err)
 	}
-	return a
+	for _, b := range a {
+		c <- b
+	}
+
+	// Recurse on previous timestamp for remaining rounds.
+	nRounds--
+	nistBytes(nistURL(v.Ts-1), nRounds, c)
 }
 
-func main() {
-	resp, err := http.Get(NIST_RANDOM)
+func nistDoc(url string) []byte {
+	resp, err := http.Get(url)
 	if err != nil {
 		panic(err)
 	}
@@ -46,11 +63,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	randomBytes := nistBytes(body)
+	return body
+}
 
+func main() {
+	c := make(chan byte)
+	go nistBytes(NIST_RANDOM, N_ROUNDS, c)
 	counts := []int{0, 0, 0}
-	for i := 0; i < len(randomBytes); i++ {
-		n := randomBytes[i]
+	for n := range c {
 		for j := 0; j < 8; j += 2 {
 			m := n & 3
 			if m != 3 {
