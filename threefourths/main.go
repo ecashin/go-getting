@@ -1,3 +1,6 @@
+// Try using the interesting prototype described at URL below.
+// https://beacon.nist.gov/home
+
 package main
 
 import (
