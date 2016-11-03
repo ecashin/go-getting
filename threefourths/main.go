@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"io/ioutil"
@@ -11,29 +12,30 @@ const (
 	NIST_RANDOM = "https://beacon.nist.gov/rest/record/last"
 )
 
-
 type Record struct {
-	XMLName xml.Name `xml:"record"`
-	Version string `xml:"version"`
-	Freq string `xml:"frequency"`
-	Ts string `xml:"timeStamp"`
-	SeedVal string `xml:"seedValue"`
-	PrevVal string `xml:"previousOutputValue"`
-	SigVal string `xml:"signatureValue"`
-	OutputVal string `xml:"outputValue"`
-	StatusCode string `xml:"statusCode"`
+	XMLName    xml.Name `xml:"record"`
+	Version    string   `xml:"version"`
+	Freq       string   `xml:"frequency"`
+	Ts         string   `xml:"timeStamp"`
+	SeedVal    string   `xml:"seedValue"`
+	PrevVal    string   `xml:"previousOutputValue"`
+	SigVal     string   `xml:"signatureValue"`
+	OutputVal  string   `xml:"outputValue"`
+	StatusCode string   `xml:"statusCode"`
 }
 
-func randstr(x []byte) string {
+func nistBytes(x []byte) []byte {
 	v := &Record{}
 	err := xml.Unmarshal(x, &v)
 	if err != nil {
 		panic(err)
 	}
-	return v.OutputVal
+	a, err := hex.DecodeString(v.OutputVal)
+	if err != nil {
+		panic(err)
+	}
+	return a
 }
-
-
 
 func main() {
 	resp, err := http.Get(NIST_RANDOM)
@@ -44,9 +46,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	counts := []int{0,0,0}
-	for i := 0; i < len(body); i++ {
-		n := body[i]
+	randomBytes := nistBytes(body)
+
+	counts := []int{0, 0, 0}
+	for i := 0; i < len(randomBytes); i++ {
+		n := randomBytes[i]
 		for j := 0; j < 8; j += 2 {
 			m := n & 3
 			if m != 3 {
