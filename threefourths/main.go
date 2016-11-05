@@ -79,7 +79,6 @@ type Msg struct {
 func main() {
 	c := make(chan Msg)
 	go nistBytes(NIST_RANDOM, c)
-	counts := []int{0, 0, 0}
 	resp := make(chan byte)
 	nRounds := N_ROUNDS
 	if len(os.Args) > 1 {
@@ -92,14 +91,10 @@ func main() {
 	for ; nRounds > 0; nRounds-- {
 		c <- Msg{"getByte", resp}
 		n := <-resp
-		for j := 0; j < 8; j += 2 {
-			m := n & 3
-			if m != 3 {
-				counts[m] += 1
-			}
-			n = n >> 2
+		for j := 0; j < 8; j++ {
+			fmt.Println(n & 1)
+			n = n >> 1
 		}
 	}
 	c <- Msg{"quit", nil}
-	fmt.Println(counts)
 }
