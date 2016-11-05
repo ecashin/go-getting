@@ -32,29 +32,29 @@ func nistURL(ts int) string {
 	return fmt.Sprintf("https://beacon.nist.gov/rest/record/previous/%d", ts)
 }
 
-func nistBytes(url string, nRounds int, c chan byte) {
-	if nRounds == 0 {
-		close(c)
-		return
-	}
+func nistBytes(url string, c chan Msg) {
 	doc := nistDoc(url)
 	v := &Record{}
 	err := xml.Unmarshal(doc, &v)
 	if err != nil {
 		panic(err)
 	}
-	// fmt.Println("debug: " + v.OutputVal)
+	fmt.Println("debug: " + v.OutputVal)
 	a, err := hex.DecodeString(v.OutputVal)
 	if err != nil {
 		panic(err)
 	}
 	for _, b := range a {
-		c <- b
+		msg := <-c
+		if msg.cmd == "getByte" {
+			msg.resp <- b
+		} else {
+			return
+		}
 	}
 
 	// Recurse on previous timestamp for remaining rounds.
-	nRounds--
-	nistBytes(nistURL(v.Ts-1), nRounds, c)
+	nistBytes(nistURL(v.Ts-1), c)
 }
 
 func nistDoc(url string) []byte {
@@ -69,11 +69,19 @@ func nistDoc(url string) []byte {
 	return body
 }
 
+type Msg struct {
+	cmd  string
+	resp chan byte
+}
+
 func main() {
-	c := make(chan byte)
-	go nistBytes(NIST_RANDOM, N_ROUNDS, c)
+	c := make(chan Msg)
+	go nistBytes(NIST_RANDOM, c)
 	counts := []int{0, 0, 0}
-	for n := range c {
+	resp := make(chan byte)
+	for nRounds := N_ROUNDS; nRounds > 0; nRounds-- {
+		c <- Msg{"getByte", resp}
+		n := <-resp
 		for j := 0; j < 8; j += 2 {
 			m := n & 3
 			if m != 3 {
@@ -82,5 +90,6 @@ func main() {
 			n = n >> 2
 		}
 	}
+	c <- Msg{"quit", nil}
 	fmt.Println(counts)
 }
