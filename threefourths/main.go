@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"strconv"
 )
 
 const (
@@ -79,7 +81,15 @@ func main() {
 	go nistBytes(NIST_RANDOM, c)
 	counts := []int{0, 0, 0}
 	resp := make(chan byte)
-	for nRounds := N_ROUNDS; nRounds > 0; nRounds-- {
+	nRounds := N_ROUNDS
+	if len(os.Args) > 1 {
+		n, err := strconv.ParseInt(os.Args[1], 0, 32)
+		if err != nil {
+			panic(err)
+		}
+		nRounds = int(n)
+	}
+	for ; nRounds > 0; nRounds-- {
 		c <- Msg{"getByte", resp}
 		n := <-resp
 		for j := 0; j < 8; j += 2 {
