@@ -16,9 +16,9 @@ import (
 
 const (
 	NIST_RANDOM = "https://beacon.nist.gov/rest/record/last"
-	N_ROUNDS    = 10
+	N_ROUNDS    = 1000
 	MIN_CHOICES = 2
-	MAX_CHOICES = 32
+	MAX_CHOICES = 64
 )
 
 type Record struct {
@@ -119,10 +119,10 @@ trials:
 		if selection < n {
 			break trials
 		} else {
-			fmt.Printf("debug: %d too large for %d\n", selection, n)
+			// fmt.Printf("debug: %d too large for %d\n", selection, n)
 		}
 	}
-	fmt.Printf("n:%d totalFlips:%d\n", n, totalFlips)
+	fmt.Printf("%d %d\n", n, totalFlips)
 }
 
 func main() {
