@@ -41,7 +41,7 @@ func nistBytes(url string, c chan Msg) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("debug: " + v.OutputVal)
+	//fmt.Println("debug: " + v.OutputVal)
 	a, err := hex.DecodeString(v.OutputVal)
 	if err != nil {
 		panic(err)
@@ -57,6 +57,29 @@ func nistBytes(url string, c chan Msg) {
 
 	// Recurse on previous timestamp for remaining rounds.
 	nistBytes(nistURL(v.Ts-1), c)
+}
+
+func nistBits(url string, c chan Msg) {
+	byteChan := make(chan Msg)
+	resp := make(chan byte)
+	go nistBytes(url, byteChan)
+	nBits := 0
+	var b byte
+	for {
+		msg := <-c
+		if msg.cmd != "getBit" {
+			byteChan <- Msg{"quit", nil}
+			return
+		}
+		if nBits == 0 {
+			byteChan <- Msg{"getByte", resp}
+			b = <-resp
+			nBits = 8
+		}
+		msg.resp <- b & 1
+		b >>= 1
+		nBits--
+	}
 }
 
 func nistDoc(url string) []byte {
@@ -78,7 +101,7 @@ type Msg struct {
 
 func main() {
 	c := make(chan Msg)
-	go nistBytes(NIST_RANDOM, c)
+	go nistBits(NIST_RANDOM, c)
 	resp := make(chan byte)
 	nRounds := N_ROUNDS
 	if len(os.Args) > 1 {
@@ -89,12 +112,9 @@ func main() {
 		nRounds = int(n)
 	}
 	for ; nRounds > 0; nRounds-- {
-		c <- Msg{"getByte", resp}
+		c <- Msg{"getBit", resp}
 		n := <-resp
-		for j := 0; j < 8; j++ {
-			fmt.Println(n & 1)
-			n = n >> 1
-		}
+		fmt.Println(n)
 	}
 	c <- Msg{"quit", nil}
 }
