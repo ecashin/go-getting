@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -16,6 +17,8 @@ import (
 const (
 	NIST_RANDOM = "https://beacon.nist.gov/rest/record/last"
 	N_ROUNDS    = 10
+	MIN_CHOICES = 2
+	MAX_CHOICES = 32
 )
 
 type Record struct {
@@ -99,10 +102,32 @@ type Msg struct {
 	resp chan byte
 }
 
+func simOne(n int, c chan Msg) {
+	totalFlips := 0
+	trialFlips := int(math.Ceil(math.Log2(float64(n))))
+	resp := make(chan byte)
+trials:
+	for {
+		selection := 0
+		for i := 0; i < trialFlips; i++ {
+			c <- Msg{"getBit", resp}
+			toss := <-resp
+			totalFlips++
+			selection <<= 1
+			selection |= int(toss)
+		}
+		if selection < n {
+			break trials
+		} else {
+			fmt.Printf("debug: %d too large for %d\n", selection, n)
+		}
+	}
+	fmt.Printf("n:%d totalFlips:%d\n", n, totalFlips)
+}
+
 func main() {
 	c := make(chan Msg)
 	go nistBits(NIST_RANDOM, c)
-	resp := make(chan byte)
 	nRounds := N_ROUNDS
 	if len(os.Args) > 1 {
 		n, err := strconv.ParseInt(os.Args[1], 0, 32)
@@ -111,10 +136,10 @@ func main() {
 		}
 		nRounds = int(n)
 	}
-	for ; nRounds > 0; nRounds-- {
-		c <- Msg{"getBit", resp}
-		n := <-resp
-		fmt.Println(n)
+	for n := MIN_CHOICES; n <= MAX_CHOICES; n++ {
+		for round := 0; round < nRounds; round++ {
+			simOne(n, c)
+		}
 	}
 	c <- Msg{"quit", nil}
 }
