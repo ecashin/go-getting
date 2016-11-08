@@ -1,16 +1,30 @@
 # Three Forths
 
-This simulation shows that when you flip a coin twice and throw out
-all double-heads roles, you get a uniform distribution over the three
-remaining possible outcomes.
+This simulation started out modeling the case where there are four
+possible choices to make, and you're using two coin flips to make the
+choice, throwing out all double-heads flips.
 
-It is rediculously elaborate, compared to the few lines of R that
-would do the same thing, or compared to the intuitive or rigorous
-thinking that one could do instead.  The reason is mostly because it
-uses a hardware-based random number supply from NIST, which I thought
-was kind of cool.
+Now it simulates many numbers of choices.
+
+The real reason for the Go implementation is mostly because it uses a
+hardware-based random number supply from NIST, which I thought was
+kind of cool but uses XML, giving me an excuse to try out the Go
+core's XML support.
 
 [https://beacon.nist.gov/home](https://beacon.nist.gov/home)
 
-It also uses the XML encoding support in Go's core library, which I've
-never had to do before.
+The `results.pdf` and `results-densities.pdf` plots were made with the
+R code below.
+
+    library(ggplot2)
+    library(dplyr)
+    
+    d <- read.table(file="selection.log", header=F)
+    names(d) <- c("n", "flips")
+    d <- data.frame(d)
+    qplot(x=n, y=flips, data=d) + geom_jitter()
+    ggsave(filename="results.pdf")
+    
+    ggplot(d %>% filter(n > 8, n<20), aes(flips)) +
+      geom_density() + facet_grid(n ~ ., scales="free_y")
+    ggsave('results-densities.pdf')
