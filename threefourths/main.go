@@ -6,20 +6,30 @@ package main
 import (
 	"encoding/hex"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math"
 	"net/http"
-	"os"
-	"strconv"
 )
 
 const (
+	HEADER = "nOptions selection nFlips"
 	NIST_RANDOM = "https://beacon.nist.gov/rest/record/last"
-	N_ROUNDS    = 1000
+	N_ROUNDS    = 100
 	MIN_CHOICES = 2
 	MAX_CHOICES = 64
 )
+
+var useGeorge bool
+var nRounds int
+
+func init() {
+	flag.BoolVar(&useGeorge, "g", false,
+		"use George's method")
+	flag.IntVar(&nRounds, "n", 10,
+		"number of simulations")
+}
 
 type Record struct {
 	XMLName    xml.Name `xml:"record"`
@@ -102,43 +112,49 @@ type Msg struct {
 	resp chan byte
 }
 
+func intFromBits(c chan Msg, nBits int) int {
+	result := 0
+	resp := make(chan byte)
+	for i := 0; i < nBits; i++ {
+		c <- Msg{"getBit", resp}
+		bit := <-resp
+		result = (result << 1) | int(bit)
+	}
+	return result
+}
+
+func simGeorge(n int, c chan Msg) {
+}
+
 func simOne(n int, c chan Msg) {
 	totalFlips := 0
 	trialFlips := int(math.Ceil(math.Log2(float64(n))))
-	resp := make(chan byte)
+	var selection int
 trials:
 	for {
-		selection := 0
-		for i := 0; i < trialFlips; i++ {
-			c <- Msg{"getBit", resp}
-			toss := <-resp
-			totalFlips++
-			selection <<= 1
-			selection |= int(toss)
-		}
+		selection = intFromBits(c, trialFlips)
+		totalFlips += trialFlips
+
 		if selection < n {
 			break trials
 		} else {
 			// fmt.Printf("debug: %d too large for %d\n", selection, n)
 		}
 	}
-	fmt.Printf("%d %d\n", n, totalFlips)
+	fmt.Printf("%d %d %d\n", n, selection, totalFlips)
 }
 
 func main() {
+	flag.Parse()
 	c := make(chan Msg)
 	go nistBits(NIST_RANDOM, c)
-	nRounds := N_ROUNDS
-	if len(os.Args) > 1 {
-		n, err := strconv.ParseInt(os.Args[1], 0, 32)
-		if err != nil {
-			panic(err)
-		}
-		nRounds = int(n)
-	}
 	for n := MIN_CHOICES; n <= MAX_CHOICES; n++ {
 		for round := 0; round < nRounds; round++ {
-			simOne(n, c)
+			if useGeorge {
+				simGeorge(n, c)
+			} else {
+				simOne(n, c)
+			}
 		}
 	}
 	c <- Msg{"quit", nil}
