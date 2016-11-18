@@ -124,6 +124,34 @@ func intFromBits(c chan Msg, nBits int) int {
 }
 
 func simGeorge(n int, c chan Msg) {
+	kMin := int(math.Ceil(math.Log2(float64(n))))
+
+	bestK := MAX_CHOICES * 2
+	oldW := math.MaxFloat64
+	var w float64
+	for k := kMin; k < MAX_CHOICES * 2; k++ {
+		z := int(math.Pow(2, float64(k))) % n
+		p := 1.0 - float64(z) / math.Pow(2, float64(k))
+		w = float64(k) / p - float64(kMin)
+		if w > oldW {
+			break
+		}
+		bestK = k
+		oldW = w
+	}
+
+	var selection int
+	totalFlips := 0
+	for {
+		j := intFromBits(c, bestK)
+		totalFlips += bestK
+		q := int(math.Pow(2, float64(bestK))) / n
+		if j < q * n {
+			selection = j % n
+			break
+		}
+	}
+	fmt.Printf("%d %d %d\n", n, selection, totalFlips)
 }
 
 func simOne(n int, c chan Msg) {
@@ -148,6 +176,7 @@ func main() {
 	flag.Parse()
 	c := make(chan Msg)
 	go nistBits(NIST_RANDOM, c)
+	fmt.Println(HEADER)
 	for n := MIN_CHOICES; n <= MAX_CHOICES; n++ {
 		for round := 0; round < nRounds; round++ {
 			if useGeorge {
